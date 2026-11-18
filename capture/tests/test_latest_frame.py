@@ -45,16 +45,22 @@ class LatestFrameCaptureTests(unittest.TestCase):
             reconnect_delay_seconds=1,
             capture_factory=lambda url, backend: source,
         )
-        with self.assertLogs("rtsp.latest_frame", level="WARNING"):
+        finish_read = threading.Event()
+
+        def read_frame():
+            ok, frame = FakeCapture.read(source)
+            if not ok:
+                finish_read.wait(timeout=5)
+            return ok, frame
+
+        with patch.object(source, "read", side_effect=read_frame):
             capture.start()
-            deadline = time.monotonic() + 1
-            packet = None
-            while time.monotonic() < deadline:
-                packet = capture.read_latest()
-                if packet is not None and packet.sequence >= 2:
-                    break
-                time.sleep(0.01)
-            capture.stop()
+            try:
+                packet = self.wait_for_packet(capture, 2)
+            finally:
+                capture.stop(timeout_seconds=0)
+                finish_read.set()
+                capture.stop()
 
         self.assertIsNotNone(packet)
         self.assertEqual(packet.sequence, 2)
@@ -63,6 +69,70 @@ class LatestFrameCaptureTests(unittest.TestCase):
         self.assertGreaterEqual(capture.metrics().capture_fps, 0)
         self.assertEqual(len(source.release_threads), 1)
         self.assertIsNot(source.release_threads[0], threading.current_thread())
+        self.assertIsNone(capture.read_latest())
+
+    def wait_for_packet(self, capture, minimum_sequence):
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            packet = capture.read_latest()
+            if packet is not None and packet.sequence >= minimum_sequence:
+                return packet
+            time.sleep(0.01)
+        self.fail("No llegó un fotograma de la secuencia esperada.")
+
+    def test_invalidates_frame_on_disconnect_and_recovers_with_new_frame(self):
+        disconnect = threading.Event()
+        reconnecting = threading.Event()
+        resume = threading.Event()
+        stopped = threading.Event()
+        old_frame = np.zeros((2, 2, 3), dtype=np.uint8)
+        new_frame = np.ones_like(old_frame)
+        first = FakeCapture([old_frame])
+        second = FakeCapture([new_frame])
+
+        def read_first():
+            ok, frame = FakeCapture.read(first)
+            if not ok:
+                disconnect.wait(timeout=5)
+            return ok, frame
+
+        def read_second():
+            ok, frame = FakeCapture.read(second)
+            if not ok:
+                stopped.wait(timeout=5)
+            return ok, frame
+
+        def reopen():
+            reconnecting.set()
+            resume.wait(timeout=5)
+            return second
+
+        with (
+            patch.object(first, "read", side_effect=read_first),
+            patch.object(second, "read", side_effect=read_second),
+            self.assertLogs("rtsp.latest_frame", level="WARNING"),
+        ):
+            sources = iter((lambda: first, reopen))
+            capture = LatestFrameCapture(
+                "rtsp://example.invalid", 0, lambda *_: next(sources)(),
+            )
+            capture.start()
+            try:
+                original = self.wait_for_packet(capture, 1)
+                disconnect.set()
+                self.assertTrue(reconnecting.wait(timeout=2))
+                self.assertIsNone(capture.read_latest())
+                self.assertFalse(capture.metrics().connected)
+                resume.set()
+                recovered = self.wait_for_packet(capture, original.sequence + 1)
+                np.testing.assert_array_equal(recovered.image, new_frame)
+            finally:
+                capture.stop(timeout_seconds=0)
+                disconnect.set()
+                resume.set()
+                stopped.set()
+                capture.stop()
+        self.assertIsNone(capture.read_latest())
 
     def test_stop_during_read_leaves_release_to_reader(self):
         reading = threading.Event()

@@ -8,6 +8,7 @@ import sys
 import time
 
 import cv2
+import numpy as np
 
 # Permite ejecutar el archivo directamente desde un IDE, además de usar
 # ``python -m capture.scripts.preview_rtsp`` desde la raíz del repositorio.
@@ -30,11 +31,21 @@ def main() -> None:
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     capture.start()
     last_metrics_log_at = 0.0
+    no_video = np.zeros((360, 640, 3), dtype=np.uint8)
+    cv2.putText(
+        no_video, "Sin video RTSP", (24, 60),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2,
+    )
 
     try:
         while True:
+            if cv2.waitKey(1) & 0xFF == ord("q"):
+                break
+            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+                break
             packet = capture.read_latest()
             if packet is None:
+                cv2.imshow(window_name, no_video)
                 time.sleep(0.01)
                 continue
             frame = packet.image.copy()
@@ -71,10 +82,6 @@ def main() -> None:
                     metrics.reconnects,
                 )
                 last_metrics_log_at = now
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
-                break
     finally:
         capture.stop()
         cv2.destroyAllWindows()

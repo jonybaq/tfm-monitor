@@ -109,9 +109,9 @@ class LatestFrameCapture:
             self._thread.start()
 
     def read_latest(self) -> FramePacket | None:
-        """Devuelve una copia del último frame, si existe."""
+        """Devuelve una copia del último frame de la conexión vigente."""
         with self._lock:
-            if self._latest_packet is None:
+            if self._stop_event.is_set() or self._latest_packet is None:
                 return None
             packet = self._latest_packet
             return FramePacket(packet.image.copy(), packet.captured_at, packet.sequence)
@@ -135,6 +135,7 @@ class LatestFrameCapture:
         """Solicita parada y espera a que el hilo lector libere OpenCV."""
         with self._lock:
             self._stop_event.set()
+            self._latest_packet = None
             thread = self._thread
         if thread is not None:
             thread.join(timeout=timeout_seconds)
@@ -155,6 +156,7 @@ class LatestFrameCapture:
                 finally:
                     with self._lock:
                         self._connected = False
+                        self._latest_packet = None
                     capture.release()
             self._wait_before_reconnect()
 
@@ -179,6 +181,8 @@ class LatestFrameCapture:
                     break
                 now = time.monotonic()
                 with self._lock:
+                    if self._stop_event.is_set():
+                        break
                     self._sequence += 1
                     self._received_frames += 1
                     self._update_capture_fps(now)
