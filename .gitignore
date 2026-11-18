@@ -1,0 +1,9 @@
+**/.env
+**/.idea/
+**/.venv/
+*.pt
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
