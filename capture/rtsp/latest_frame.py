@@ -13,6 +13,8 @@ import numpy as np
 
 
 LOGGER = logging.getLogger(__name__)
+OPEN_TIMEOUT_MS = 3000
+READ_TIMEOUT_MS = 2000
 
 
 class VideoCaptureProtocol(Protocol):
@@ -72,7 +74,6 @@ class LatestFrameCapture:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
-        self._capture: VideoCaptureProtocol | None = None
         self._latest_packet: FramePacket | None = None
         self._received_frames = 0
         self._capture_fps = 0.0
@@ -84,8 +85,15 @@ class LatestFrameCapture:
         self._sequence = 0
 
     @staticmethod
-    def _open_cv_capture(url: str, _: int) -> VideoCaptureProtocol:
-        return cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    def _open_cv_capture(url: str, backend: int) -> VideoCaptureProtocol:
+        return cv2.VideoCapture(
+            url,
+            backend,
+            [
+                cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, OPEN_TIMEOUT_MS,
+                cv2.CAP_PROP_READ_TIMEOUT_MSEC, READ_TIMEOUT_MS,
+            ],
+        )
 
     def start(self) -> None:
         """Inicia el hilo de captura una sola vez."""
@@ -124,50 +132,49 @@ class LatestFrameCapture:
             )
 
     def stop(self, timeout_seconds: float = 5.0) -> None:
-        """Solicita parada y libera el recurso de OpenCV."""
-        self._stop_event.set()
+        """Solicita parada y espera a que el hilo lector libere OpenCV."""
         with self._lock:
-            capture = self._capture
-        if capture is not None:
-            capture.release()
-        thread = self._thread
+            self._stop_event.set()
+            thread = self._thread
         if thread is not None:
             thread.join(timeout=timeout_seconds)
-        with self._lock:
-            self._connected = False
-            self._capture = None
+            if thread.is_alive():
+                LOGGER.warning("El hilo RTSP sigue cerrándose tras el tiempo de espera.")
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
             try:
                 capture = self._capture_factory(self._url, cv2.CAP_FFMPEG)
             except cv2.error:
-                self._register_failure("OpenCV no pudo crear la captura RTSP.")
-                self._wait_before_reconnect()
-                continue
+                if not self._stop_event.is_set():
+                    self._register_failure("OpenCV no pudo crear la captura RTSP.")
+            else:
+                try:
+                    if not self._stop_event.is_set():
+                        self._read_stream(capture)
+                finally:
+                    with self._lock:
+                        self._connected = False
+                    capture.release()
+            self._wait_before_reconnect()
+
+    def _read_stream(self, capture: VideoCaptureProtocol) -> None:
+        try:
             capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            opened = capture.isOpened()
             with self._lock:
-                self._capture = capture
-                self._connected = capture.isOpened()
+                self._connected = opened
                 self._reconnects += 1
-
-            if not capture.isOpened():
-                self._register_failure("No se pudo abrir el stream RTSP.")
-                capture.release()
-                self._wait_before_reconnect()
-                continue
-
+            if not opened:
+                if not self._stop_event.is_set():
+                    self._register_failure("No se pudo abrir el stream RTSP.")
+                return
             LOGGER.info("Stream RTSP conectado.")
             while not self._stop_event.is_set():
-                try:
-                    ok, frame = capture.read()
-                except cv2.error:
-                    if not self._stop_event.is_set():
-                        self._register_failure("OpenCV interrumpió la lectura RTSP.")
+                ok, frame = capture.read()
+                if self._stop_event.is_set():
                     break
                 if not ok or frame is None:
-                    if self._stop_event.is_set():
-                        break
                     self._register_failure("Error al leer un frame RTSP.")
                     break
                 now = time.monotonic()
@@ -177,11 +184,9 @@ class LatestFrameCapture:
                     self._update_capture_fps(now)
                     self._latest_packet = FramePacket(frame, now, self._sequence)
 
-            capture.release()
-            with self._lock:
-                self._connected = False
-                self._capture = None
-            self._wait_before_reconnect()
+        except cv2.error:
+            if not self._stop_event.is_set():
+                self._register_failure("OpenCV interrumpió la captura RTSP.")
 
     def _register_failure(self, message: str) -> None:
         with self._lock:
