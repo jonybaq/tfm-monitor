@@ -61,6 +61,8 @@ class LatestFrameCaptureTests(unittest.TestCase):
 
         output = "\n".join(logs.output)
         self.assertIn("OpenCV no pudo crear la captura RTSP.", output)
+        self.assertEqual(capture.metrics().connection_attempts, 1)
+        self.assertEqual(capture.metrics().reconnects, 0)
         self.assertNotIn(config.username, output)
         self.assertNotIn(config.password, output)
 
@@ -84,6 +86,8 @@ class LatestFrameCaptureTests(unittest.TestCase):
             capture.start()
             try:
                 packet = self.wait_for_packet(capture, 2)
+                self.assertEqual(capture.metrics().connection_attempts, 1)
+                self.assertEqual(capture.metrics().reconnects, 0)
             finally:
                 capture.stop(timeout_seconds=0)
                 finish_read.set()
@@ -150,9 +154,13 @@ class LatestFrameCaptureTests(unittest.TestCase):
                 self.assertTrue(reconnecting.wait(timeout=2))
                 self.assertIsNone(capture.read_latest())
                 self.assertFalse(capture.metrics().connected)
+                self.assertEqual(capture.metrics().connection_attempts, 2)
+                self.assertEqual(capture.metrics().reconnects, 0)
                 resume.set()
                 recovered = self.wait_for_packet(capture, original.sequence + 1)
                 np.testing.assert_array_equal(recovered.image, new_frame)
+                self.assertEqual(capture.metrics().connection_attempts, 2)
+                self.assertEqual(capture.metrics().reconnects, 1)
             finally:
                 capture.stop(timeout_seconds=0)
                 disconnect.set()

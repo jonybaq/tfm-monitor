@@ -61,9 +61,10 @@ def main() -> None:
             status = "conectada" if metrics.connected else "desconectada"
             lines = (
                 f"Captura: {metrics.capture_fps:.1f} FPS",
-                f"Edad del frame: {frame_age_ms:.0f} ms",
+                f"Edad local del frame: {frame_age_ms:.0f} ms",
                 f"Conexión: {status}",
-                f"Errores: {metrics.read_failures} | Reconexiones: {metrics.reconnects}",
+                f"Errores: {metrics.read_failures} | Intentos: {metrics.connection_attempts}",
+                f"Reconexiones exitosas: {metrics.reconnects}",
             )
             for index, line in enumerate(lines):
                 cv2.putText(
@@ -80,13 +81,15 @@ def main() -> None:
             now = time.monotonic()
             if now - last_metrics_log_at >= METRICS_LOG_INTERVAL_SECONDS:
                 logging.info(
-                    "Métricas RTSP | fps=%.1f | edad_frame_ms=%.0f | "
-                    "conectada=%s | frames=%d | errores=%d | reconexiones=%d",
+                    "Métricas RTSP | fps=%.1f | edad_local_frame_ms=%.0f | "
+                    "conectada=%s | frames=%d | errores=%d | intentos=%d | "
+                    "reconexiones_exitosas=%d",
                     metrics.capture_fps,
                     frame_age_ms,
                     metrics.connected,
                     metrics.received_frames,
                     metrics.read_failures,
+                    metrics.connection_attempts,
                     metrics.reconnects,
                 )
                 last_metrics_log_at = now

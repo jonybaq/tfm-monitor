@@ -51,6 +51,11 @@ PyCharm cada cinco segundos.
 
 ## Pruebas unitarias
 
+La edad local del fotograma se mide desde que OpenCV lo entrega a Python.
+Los intentos incluyen la apertura inicial y los fallos. Las reconexiones
+exitosas cuentan las aperturas que prosperan después de la primera conexión
+exitosa durante la vida del objeto de captura.
+
 ```powershell
 ..\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```

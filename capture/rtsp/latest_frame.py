@@ -48,6 +48,7 @@ class CaptureMetrics:
     reconnects: int
     connected: bool
     last_frame_age_seconds: float | None
+    connection_attempts: int = 0
 
 
 CaptureFactory = Callable[[str, int], VideoCaptureProtocol]
@@ -81,6 +82,8 @@ class LatestFrameCapture:
         self._fps_window_started_at: float | None = None
         self._read_failures = 0
         self._reconnects = 0
+        self._connection_attempts = 0
+        self._has_connected = False
         self._connected = False
         self._sequence = 0
 
@@ -129,6 +132,7 @@ class LatestFrameCapture:
                 reconnects=self._reconnects,
                 connected=self._connected,
                 last_frame_age_seconds=age,
+                connection_attempts=self._connection_attempts,
             )
 
     def stop(self, timeout_seconds: float = 5.0) -> None:
@@ -144,6 +148,8 @@ class LatestFrameCapture:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
+            with self._lock:
+                self._connection_attempts += 1
             try:
                 capture = self._capture_factory(self._url, cv2.CAP_FFMPEG)
             except cv2.error:
@@ -166,7 +172,9 @@ class LatestFrameCapture:
             opened = capture.isOpened()
             with self._lock:
                 self._connected = opened
-                self._reconnects += 1
+                if opened:
+                    self._reconnects += int(self._has_connected)
+                    self._has_connected = True
             if not opened:
                 if not self._stop_event.is_set():
                     self._register_failure("No se pudo abrir el stream RTSP.")
