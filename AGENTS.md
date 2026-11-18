@@ -294,6 +294,17 @@ componente y registra el resultado en la tarea, junto a su ID, antes de
 moverla a Done en TaskView. Realiza también las comprobaciones adicionales
 que exija su criterio de cierre.
 
+Antes de marcar una tarea con cambios en el repositorio como Done, crea un
+commit que identifique la tarea, publica el commit en la rama de trabajo y
+registra su hash en TaskView. Si falla el push, mantén la tarea en curso e
+indica el bloqueo.
+
+En cada entrega de una corrección, explica para qué sirve la tarea y
+distingue las pruebas ejecutadas por Codex de la prueba que hará el usuario.
+Indica el comando o los pasos, el resultado esperado y qué información
+debe compartir si falla. Si la corrección no requiere hardware ni
+interacción manual, da al usuario un comando para repetir la comprobación.
+
 Priorizar reglas temporales, duración, persistencia, zonas, distancias,
 solapamientos, niveles de alerta y transformación estado→evento.
 
