@@ -31,6 +31,7 @@ def main() -> None:
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     capture.start()
     last_metrics_log_at = 0.0
+    displayed_sequence: int | None = None
     no_video = np.zeros((360, 640, 3), dtype=np.uint8)
     cv2.putText(
         no_video, "Sin video RTSP", (24, 60),
@@ -38,6 +39,7 @@ def main() -> None:
     )
 
     try:
+        cv2.imshow(window_name, no_video)
         while True:
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
@@ -45,10 +47,15 @@ def main() -> None:
                 break
             packet = capture.read_latest()
             if packet is None:
-                cv2.imshow(window_name, no_video)
+                if displayed_sequence is not None:
+                    cv2.imshow(window_name, no_video)
+                    displayed_sequence = None
                 time.sleep(0.01)
                 continue
-            frame = packet.image.copy()
+            if packet.sequence == displayed_sequence:
+                time.sleep(0.005)
+                continue
+            frame = packet.image
             metrics = capture.metrics()
             frame_age_ms = (time.monotonic() - packet.captured_at) * 1000
             status = "conectada" if metrics.connected else "desconectada"
@@ -69,6 +76,7 @@ def main() -> None:
                     2,
                 )
             cv2.imshow(window_name, frame)
+            displayed_sequence = packet.sequence
             now = time.monotonic()
             if now - last_metrics_log_at >= METRICS_LOG_INTERVAL_SECONDS:
                 logging.info(
