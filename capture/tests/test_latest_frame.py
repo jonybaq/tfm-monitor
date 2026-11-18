@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 
 from rtsp.latest_frame import LatestFrameCapture, OPEN_TIMEOUT_MS, READ_TIMEOUT_MS
+from rtsp.config import RtspConfig
 
 
 class FakeCapture:
@@ -37,6 +38,32 @@ class FakeCapture:
 
 
 class LatestFrameCaptureTests(unittest.TestCase):
+    def test_open_exception_keeps_credentials_out_of_application_log(self):
+        config = RtspConfig("127.0.0.1", "usuario_ficticio", "clave_ficticia")
+        retry_wait = threading.Event()
+
+        def fail_open(url, backend):
+            raise cv2.error(f"Simulated failure opening {url}")
+
+        capture = LatestFrameCapture(config.url, capture_factory=fail_open)
+
+        def wait_before_reconnect():
+            retry_wait.set()
+            capture._stop_event.wait(timeout=5)
+
+        with patch.object(capture, "_wait_before_reconnect", side_effect=wait_before_reconnect):
+            with self.assertLogs("rtsp.latest_frame", level="WARNING") as logs:
+                capture.start()
+                try:
+                    self.assertTrue(retry_wait.wait(timeout=2))
+                finally:
+                    capture.stop()
+
+        output = "\n".join(logs.output)
+        self.assertIn("OpenCV no pudo crear la captura RTSP.", output)
+        self.assertNotIn(config.username, output)
+        self.assertNotIn(config.password, output)
+
     def test_returns_latest_frame_and_metrics(self) -> None:
         frames = [np.full((2, 2, 3), value, dtype=np.uint8) for value in (1, 2)]
         source = FakeCapture(frames)

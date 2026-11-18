@@ -10,6 +10,13 @@ from rtsp.config import RtspConfig, RtspConfigurationError
 
 
 class RtspConfigTests(unittest.TestCase):
+    def test_repr_and_str_hide_credentials(self) -> None:
+        config = RtspConfig("127.0.0.1", "usuario_ficticio", "clave_ficticia")
+        for output in (repr(config), str(config)):
+            self.assertNotIn(config.username, output)
+            self.assertNotIn(config.password, output)
+            self.assertIn(config.host, output)
+
     def test_builds_url_and_escapes_credentials(self) -> None:
         config = RtspConfig("192.168.1.10", "user@example", "p@ss word")
 

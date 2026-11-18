@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import os
 from pathlib import Path
 from urllib.parse import quote
@@ -14,17 +14,17 @@ class RtspConfigurationError(ValueError):
 
 @dataclass(frozen=True)
 class RtspConfig:
-    """Parámetros no secretos necesarios para construir una URL RTSP."""
+    """Configuración RTSP con credenciales excluidas de su representación."""
 
     host: str
-    username: str
-    password: str
+    username: str = field(repr=False)
+    password: str = field(repr=False)
     port: int = 554
     stream_path: str = "stream1"
 
     @property
     def url(self) -> str:
-        """Construye una URL codificando caracteres especiales de credenciales."""
+        """Construye una URL que contiene credenciales y debe mantenerse privada."""
         username = quote(self.username, safe="")
         password = quote(self.password, safe="")
         path = self.stream_path.lstrip("/")
