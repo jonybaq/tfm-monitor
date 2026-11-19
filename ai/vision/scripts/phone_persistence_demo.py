@@ -27,14 +27,22 @@ def main() -> None:
     capture = LatestFrameCapture(RtspConfig.from_environment().url)
     detector = YoloDetector()
     print(f"Dispositivo de inferencia: {detector.device_name}")
-    temporal = TemporalStateEngine({
+    thresholds = {
         PHONE_SIGNAL_NAME: DEMO_THRESHOLD_SECONDS,
         REMOTE_SIGNAL_NAME: DEMO_THRESHOLD_SECONDS,
-    })
+    }
+    temporal = TemporalStateEngine(thresholds)
+
+    def reset_persistence() -> None:
+        nonlocal temporal
+        temporal = TemporalStateEngine(thresholds)
+
     capture.start()
     window_name = "M3 - Persistencia de celular"
     try:
-        for packet in preview_frames(capture, window_name):
+        for packet in preview_frames(
+            capture, window_name, on_video_lost=reset_persistence,
+        ):
             result = detector.infer(packet.image, packet.captured_at)
             phone_detections = [
                 item for item in result.detections if item.class_name == "cell phone"

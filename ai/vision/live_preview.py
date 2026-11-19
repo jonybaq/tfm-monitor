@@ -1,7 +1,7 @@
 """Entrega fotogramas nuevos y atiende los controles de la vista en vivo."""
 
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 
 import cv2
 import numpy as np
@@ -10,7 +10,10 @@ from rtsp.latest_frame import FramePacket, LatestFrameCapture
 
 
 def preview_frames(
-    capture: LatestFrameCapture, window_name: str,
+    capture: LatestFrameCapture,
+    window_name: str,
+    *,
+    on_video_lost: Callable[[], None] | None = None,
 ) -> Iterator[FramePacket]:
     no_video = np.zeros((360, 640, 3), dtype=np.uint8)
     cv2.putText(
@@ -29,6 +32,8 @@ def preview_frames(
         if packet is None and showing_video:
             cv2.imshow(window_name, no_video)
             showing_video = False
+            if on_video_lost is not None:
+                on_video_lost()
         if packet is None or packet.sequence == last_sequence:
             time.sleep(0.005)
             continue
