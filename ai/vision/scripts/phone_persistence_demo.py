@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import sys
-import time
 
 import cv2
 
@@ -12,6 +11,7 @@ for path in (VISION_ROOT, PROJECT_ROOT / "ai" / "temporal", PROJECT_ROOT / "capt
     sys.path.insert(0, str(path))
 
 from detector import YoloDetector
+from live_preview import preview_frames
 from engine import TemporalStateEngine
 from temporal_models import SignalObservation
 from rtsp.config import RtspConfig
@@ -32,14 +32,9 @@ def main() -> None:
         REMOTE_SIGNAL_NAME: DEMO_THRESHOLD_SECONDS,
     })
     capture.start()
-    last_sequence = 0
+    window_name = "M3 - Persistencia de celular"
     try:
-        while True:
-            packet = capture.read_latest()
-            if packet is None or packet.sequence == last_sequence:
-                time.sleep(0.005)
-                continue
-            last_sequence = packet.sequence
+        for packet in preview_frames(capture, window_name):
             result = detector.infer(packet.image, packet.captured_at)
             phone_detections = [
                 item for item in result.detections if item.class_name == "cell phone"
@@ -89,9 +84,7 @@ def main() -> None:
             if remote_state and remote_state.persistence_reached:
                 cv2.putText(frame, "CONTROL REMOTO: UMBRAL ALCANZADO", (10, 150),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            cv2.imshow("M3 - Persistencia de celular", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
+            cv2.imshow(window_name, frame)
     finally:
         capture.stop()
         cv2.destroyAllWindows()

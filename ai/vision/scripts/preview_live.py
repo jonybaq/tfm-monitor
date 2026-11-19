@@ -16,6 +16,7 @@ for path in (VISION_ROOT, CAPTURE_ROOT):
         sys.path.insert(0, str(path))
 
 from detector import YoloDetector
+from live_preview import preview_frames
 from rtsp.config import RtspConfig
 from rtsp.latest_frame import LatestFrameCapture
 
@@ -25,20 +26,13 @@ def main() -> None:
     capture = LatestFrameCapture(RtspConfig.from_environment().url)
     detector = YoloDetector()
     window_name = "M2 - Tapo C220 + YOLO11n"
-    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     capture.start()
-    last_sequence = 0
     processing_started_at = time.monotonic()
     processed_frames = 0
     last_metrics_log_at = 0.0
 
     try:
-        while True:
-            packet = capture.read_latest()
-            if packet is None or packet.sequence == last_sequence:
-                time.sleep(0.005)
-                continue
-            last_sequence = packet.sequence
+        for packet in preview_frames(capture, window_name):
             result = detector.infer(packet.image, packet.captured_at)
             processed_frames += 1
             elapsed = time.monotonic() - processing_started_at
@@ -71,10 +65,6 @@ def main() -> None:
                     metrics.read_failures,
                 )
                 last_metrics_log_at = now
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-            if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
-                break
     finally:
         capture.stop()
         cv2.destroyAllWindows()
