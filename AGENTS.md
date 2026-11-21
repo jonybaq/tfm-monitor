@@ -239,6 +239,9 @@ datos sintéticos o escenas sin información personal cuando sea viable.
 -   Separar configuración y código.
 -   No ejecutar inferencia pesada en el hilo de UI.
 -   No bloquear captura mientras se ejecuta inferencia.
+-   En la consola interactiva, presentar las opciones y confirmaciones en un
+    menú vertical navegable con las flechas arriba y abajo y Enter. Reservar
+    la entrada de texto para datos como una dirección o una credencial.
 
 ## Estructura prevista
 

@@ -7,9 +7,19 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
+DEFAULT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+
 
 class RtspConfigurationError(ValueError):
     """Indica que faltan o son inválidos los valores de conexión RTSP."""
+
+
+class MissingRtspConfiguration(RtspConfigurationError):
+    """Expone los nombres de las variables obligatorias que faltan."""
+
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
+        super().__init__("Faltan variables de entorno requeridas: " + ", ".join(keys))
 
 
 @dataclass(frozen=True)
@@ -38,7 +48,7 @@ class RtspConfig:
         `capture/.env` es local, no se registra y debe permanecer fuera de Git.
         """
         if env_file is None:
-            env_file = Path(__file__).resolve().parents[1] / ".env"
+            env_file = DEFAULT_ENV_FILE
         _load_environment_file(env_file)
         required = {
             "RTSP_HOST": os.getenv("RTSP_HOST", "").strip(),
@@ -46,11 +56,6 @@ class RtspConfig:
             "RTSP_PASSWORD": os.getenv("RTSP_PASSWORD", ""),
         }
         missing = [name for name, value in required.items() if not value]
-        if missing:
-            raise RtspConfigurationError(
-                "Faltan variables de entorno requeridas: " + ", ".join(missing)
-            )
-
         port_text = os.getenv("RTSP_PORT", "554")
         try:
             port = int(port_text)
@@ -62,6 +67,8 @@ class RtspConfig:
         stream_path = os.getenv("RTSP_STREAM_PATH", "stream1").strip()
         if not stream_path:
             raise RtspConfigurationError("RTSP_STREAM_PATH no puede estar vacío.")
+        if missing:
+            raise MissingRtspConfiguration(missing)
 
         return cls(
             host=required["RTSP_HOST"],

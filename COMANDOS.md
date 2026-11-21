@@ -91,6 +91,10 @@ La dirección del MCP es `http://127.0.0.1:3100/mcp`.
 
 ## 7. Enviar vídeo y audio de la Tapo a Azure
 
+Para iniciar el emisor Python, sigue los pasos del
+[módulo de streaming](streaming/README.md). El comando manual de FFmpeg
+queda documentado abajo como referencia de la prueba original.
+
 Para la HU-02 se usará **`ffmpeg.exe` instalado en Windows**. El programa Python
 lo ejecutará mediante `subprocess`, que viene con Python. El entorno
 `.venv` no necesita instalar `ffmpeg-python`, PyAV ni otro paquete para este envío.
