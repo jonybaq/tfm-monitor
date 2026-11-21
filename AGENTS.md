@@ -288,6 +288,21 @@ merge/rebase definitiva se decidirá cuando exista repositorio remoto.
 
 ## Testing
 
+### Revisión de código y seguridad
+
+Cuando se solicite analizar un proyecto o un archivo, limitar la revisión al
+alcance indicado. Ejecutar Bandit para Python, Trivy para las imágenes Docker
+relacionadas y Codex Security si está disponible. Indicar qué herramienta no
+aplica o no pudo ejecutarse. Incorporar el informe de SonarQube si el usuario
+lo aporta. Consolidar las alertas por causa y corrección común, documentar
+falsos positivos y distinguir vulnerabilidades, cobertura pendiente y mejoras
+de mantenibilidad. Entregar el informe como una sola tabla con ID, tipo de
+hallazgo, nivel de alerta, archivos, carpetas o imágenes afectadas,
+herramientas que lo identificaron, resumen, solución, riesgo de no
+corregirlo y nivel de riesgo. Ordenar las alertas de baja a media y alta,
+y poner las desconocidas al final. Usar bajo, medio o alto para el riesgo
+cuando haya evidencia suficiente. Incluir en la solución cómo verificarla.
+
 ### Unitarios
 
 Toda corrección de una tarea debe quedar cubierta por pruebas unitarias.
