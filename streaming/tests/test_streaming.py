@@ -20,6 +20,44 @@ from streaming.config import StreamDestination, choose_mode
 
 
 class StreamingConfigTests(unittest.TestCase):
+    def test_destination_precedence_for_all_modes_and_transports(self):
+        with TemporaryDirectory() as directory:
+            env_file = Path(directory) / ".env"
+            for mode, transport in (
+                ("local", "srt"), ("local", "rtsp"),
+                ("azure", "srt"), ("azure", "rtsp"),
+            ):
+                prefix = f"STREAMING_{mode.upper()}"
+                port_key = f"{prefix}_{'RTSP_PORT' if transport == 'rtsp' else 'PORT'}"
+                env_file.write_text(
+                    f"STREAMING_MODE={mode}\nSTREAMING_TRANSPORT={transport}\n"
+                    f"{prefix}_HOST=file.example.com\n{port_key}=18890\n"
+                    "STREAMING_AZURE_SRT_PASSPHRASE=example-phrase\n"
+                    "STREAMING_AZURE_PUBLISH_PASSWORD=example-publisher-password\n",
+                    encoding="utf-8",
+                )
+                with self.subTest(mode=mode, transport=transport), patch.dict(os.environ, {
+                    "STREAMING_HOST": "override.example.com",
+                    f"{prefix}_HOST": "mode.example.com",
+                    port_key: "18891",
+                }, clear=True):
+                    config = StreamDestination.from_environment(env_file=env_file)
+                self.assertEqual((config.mode, config.transport), (mode, transport))
+                self.assertEqual((config.host, config.port), ("override.example.com", 18891))
+
+    def test_invalid_prompted_port_does_not_replace_the_env_file(self):
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            env_file = Path(directory) / ".env"
+            original = "STREAMING_MODE=local\nSTREAMING_TRANSPORT=srt\n"
+            env_file.write_text(original, encoding="utf-8")
+            with (
+                patch("builtins.input", side_effect=["localhost", "70000"]),
+                redirect_stdout(StringIO()),
+                self.assertRaisesRegex(ValueError, "STREAMING_LOCAL_PORT"),
+            ):
+                StreamDestination.from_environment(interactive=True, env_file=env_file)
+            self.assertEqual(env_file.read_text(encoding="utf-8"), original)
+
     def test_interactive_local_uses_loopback(self):
         with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True), patch(
             "streaming.config.choose_mode", return_value="local"
