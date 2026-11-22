@@ -16,7 +16,7 @@ from streaming.__main__ import (
     main, prepare_ffmpeg, publish,
     publish_once,
 )
-from streaming.config import StreamDestination, choose_mode, choose_option
+from streaming.config import StreamDestination, StreamingError, choose_mode, choose_option
 
 
 class StreamingConfigTests(unittest.TestCase):
@@ -239,6 +239,35 @@ class StreamingConfigTests(unittest.TestCase):
 
 
 class StreamingProcessTests(unittest.TestCase):
+    @patch("streaming.__main__.sys.stdin.isatty", return_value=False)
+    @patch("streaming.__main__.initialize_ffmpeg")
+    def test_expected_error_keeps_its_actionable_message(self, initialize, _tty):
+        initialize.side_effect = StreamingError("Configura el destino.")
+        with self.assertLogs("streaming.__main__", level="ERROR") as logs:
+            self.assertEqual(main(), 1)
+        self.assertEqual(logs.output, ["ERROR:streaming.__main__:Configura el destino."])
+
+    @patch("streaming.__main__.sys.stdin.isatty", return_value=False)
+    @patch("streaming.__main__.initialize_ffmpeg")
+    def test_unexpected_error_logs_trace_without_credential_or_cause(self, initialize, _tty):
+        credential = "private-credential"
+        private_cause = "private-cause"
+
+        def fail(*, interactive):
+            try:
+                raise OSError(private_cause)
+            except OSError as cause:
+                raise ValueError(credential) from cause
+
+        initialize.side_effect = fail
+        with self.assertLogs("streaming.__main__", level="ERROR") as logs:
+            self.assertEqual(main(), 1)
+        output = "\n".join(logs.output)
+        self.assertIn("Traceback", output)
+        self.assertIn("in fail", output)
+        self.assertNotIn(credential, output)
+        self.assertNotIn(private_cause, output)
+
     @patch("streaming.__main__.sys.stdin.isatty", return_value=True)
     @patch("streaming.__main__.choose_option", return_value=1)
     @patch("streaming.pyav_sender.PyAvSender")

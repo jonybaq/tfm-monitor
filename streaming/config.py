@@ -11,6 +11,10 @@ ENV_FILE = Path(__file__).with_name(".env")
 AZURE_PUBLISH_USER = "tfm-publisher"
 
 
+class StreamingError(ValueError):
+    """Expected streaming failure with a message safe to show in the console."""
+
+
 def choose_option(
     prompt: str, options: tuple[str, str], *, clear_on_select: bool = False
 ) -> int:
@@ -83,7 +87,7 @@ def _select_mode_and_transport(
         mode = choose_mode()
     mode = mode or "local"
     if mode not in {"local", "azure"}:
-        raise ValueError("STREAMING_MODE debe ser local o azure.")
+        raise StreamingError("STREAMING_MODE debe ser local o azure.")
 
     transport = os.getenv(
         "STREAMING_TRANSPORT", settings.get("STREAMING_TRANSPORT", "")
@@ -93,7 +97,7 @@ def _select_mode_and_transport(
     if not transport:
         transport = choose_transport() if interactive else "srt"
     if transport not in {"srt", "rtsp"}:
-        raise ValueError("STREAMING_TRANSPORT debe ser srt o rtsp.")
+        raise StreamingError("STREAMING_TRANSPORT debe ser srt o rtsp.")
     return mode, transport
 
 
@@ -138,22 +142,22 @@ def _prompt_host(mode: str) -> str:
 
 def _validate_publish_password(azure_rtsp: bool, publish_password: str, password_key: str) -> None:
     if azure_rtsp and not publish_password:
-        raise ValueError(f"Configura {password_key} para publicar por RTSP en Azure.")
+        raise StreamingError(f"Configura {password_key} para publicar por RTSP en Azure.")
     if publish_password and not re.fullmatch(r"[A-Za-z0-9_-]{16,79}", publish_password):
-        raise ValueError(f"{password_key} debe tener entre 16 y 79 letras, números, guiones o guiones bajos.")
+        raise StreamingError(f"{password_key} debe tener entre 16 y 79 letras, números, guiones o guiones bajos.")
 
 
 def _validate_passphrase(passphrase: str, required: bool) -> None:
     if any(character in passphrase for character in "\r\n\x00") or (
         (required or passphrase) and not 10 <= len(passphrase.encode("utf-8")) <= 79
     ):
-        raise ValueError("La frase SRT debe contener entre 10 y 79 bytes.")
+        raise StreamingError("La frase SRT debe contener entre 10 y 79 bytes.")
 
 
 def _read_switch(key: str, value: str) -> bool:
     value = value.strip().lower()
     if value not in {"on", "off"}:
-        raise ValueError(f"{key} debe ser on u off.")
+        raise StreamingError(f"{key} debe ser on u off.")
     return value == "on"
 
 
@@ -166,14 +170,14 @@ def _validate_destination(
         host = "127.0.0.1"
     _validate_publish_password(azure_rtsp, publish_password, password_key)
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", host):
-        raise ValueError(f"{host_key} debe ser una IP IPv4 o un nombre DNS.")
+        raise StreamingError(f"{host_key} debe ser una IP IPv4 o un nombre DNS.")
     _validate_passphrase(passphrase, needs_phrase)
     try:
         port = int(port_text or default_port)
     except ValueError:
         port = 0
     if not 1 <= port <= 65535:
-        raise ValueError(f"{port_key} debe estar entre 1 y 65535.")
+        raise StreamingError(f"{port_key} debe estar entre 1 y 65535.")
     return (
         host, port, _read_switch("STREAMING_AUDIO", audio),
         _read_switch("STREAMING_LOW_LATENCY", low_latency),

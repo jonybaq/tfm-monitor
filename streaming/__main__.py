@@ -15,7 +15,7 @@ import time
 from capture.rtsp.config import RtspConfig, RtspConfigurationError
 
 from .camera import configure_camera, show_countdown, wait_for_camera
-from .config import StreamDestination, choose_option
+from .config import StreamDestination, StreamingError, choose_option
 from .console import ConsoleStep, finish_group
 from .ffmpeg_environment import ffmpeg_environment
 
@@ -253,7 +253,7 @@ def publish_once(
             _stop_attempt(process, reader)
 
     if attempt.issue:
-        raise ValueError(attempt.issue)
+        raise StreamingError(attempt.issue)
     if attempt.output_opened:
         return INTERRUPTED
     if attempt.camera_opened:
@@ -432,11 +432,19 @@ def main() -> int:
         LOGGER.info("Envío detenido")
         return 0
     except EOFError:
-        LOGGER.error("No se pudo leer el destino. Configura STREAMING_MODE.")
+        message = "No se pudo leer el destino. Configura STREAMING_MODE."
+    except StreamingError as error:
+        message = str(error)
     except ValueError as error:
-        LOGGER.error("%s", error)
+        # The original message or exception chain can carry authenticated URLs.
+        LOGGER.exception(
+            "Error inesperado durante el envío audiovisual.",
+            exc_info=(ValueError, ValueError("Detalle omitido"), error.__traceback__),
+        )
+        return 1
     except OSError:
-        LOGGER.error("No se pudo leer la configuración o ejecutar FFmpeg.")
+        message = "No se pudo leer la configuración o ejecutar FFmpeg."
+    LOGGER.error("%s", message)
     return 1
 
 

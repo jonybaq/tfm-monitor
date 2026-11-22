@@ -8,7 +8,7 @@ import time
 
 from capture.rtsp.config import RtspConfig, RtspConfigurationError
 from .camera import show_countdown
-from .config import StreamDestination
+from .config import StreamDestination, StreamingError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ class PyAvSender:
         try:
             import av
         except ImportError:
-            raise ValueError(
+            raise StreamingError(
                 r"PyAV no está disponible. Ejecuta .\.venv\Scripts\python.exe -m pip install av."
             ) from None
         self.av = av
@@ -137,7 +137,7 @@ class PyAvSender:
         start_timeout: float, on_connected: Callable[[], None], interactive: bool,
     ) -> str:
         if destination.transport != "rtsp":
-            raise ValueError("El modo experimental de PyAV requiere RTSP.")
+            raise StreamingError("El modo experimental de PyAV requiere RTSP.")
         camera_opened = False
         progress = PublicationProgress()
         started = time.monotonic()
@@ -148,7 +148,7 @@ class PyAvSender:
             ) as source:
                 camera_opened = True
                 if not source.streams.video or (destination.audio_enabled and not source.streams.audio):
-                    raise ValueError("La cámara no entrega las pistas requeridas.")
+                    raise StreamingError("La cámara no entrega las pistas requeridas.")
                 with self.av.open(
                     destination.url, mode="w", format="rtsp",
                     options={"rtsp_transport": "tcp"}, timeout=(min(start_timeout, 5), 5),
@@ -159,7 +159,7 @@ class PyAvSender:
                     )
         except self.av.error.HTTPUnauthorizedError:
             target = "El receptor" if camera_opened else "La cámara"
-            raise ValueError(f"{target} rechazó las credenciales RTSP.") from None
+            raise StreamingError(f"{target} rechazó las credenciales RTSP.") from None
         except self.av.error.FFmpegError as error:
             # The exception message and filename may contain authenticated URLs.
             LOGGER.warning("PyAV interrumpió la conexión (código %d).", error.errno)
