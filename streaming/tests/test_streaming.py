@@ -192,6 +192,36 @@ class StreamingConfigTests(unittest.TestCase):
 
 
 class StreamingProcessTests(unittest.TestCase):
+    @patch("streaming.__main__.sys.stdin.isatty", return_value=True)
+    @patch("streaming.__main__.choose_option", return_value=1)
+    @patch("streaming.pyav_sender.PyAvSender")
+    @patch("streaming.__main__.initialize_camera")
+    @patch("streaming.__main__.initialize_ffmpeg")
+    @patch("streaming.__main__.StreamDestination.from_environment")
+    @patch("streaming.__main__.publish", return_value=0)
+    def test_pyav_does_not_start_ffmpeg(
+        self, publish_stream, destination, ffmpeg, camera, sender, _menu, _tty,
+    ):
+        with redirect_stdout(StringIO()):
+            self.assertEqual(main(), 0)
+        ffmpeg.assert_not_called()
+        self.assertEqual(camera.call_args.kwargs["probe"], sender.return_value.probe)
+        destination.assert_called_once_with(interactive=True, rtsp_only=True)
+        self.assertEqual(publish_stream.call_args.kwargs["attempt"].func, sender.return_value.send)
+
+    @patch("streaming.__main__.subprocess.Popen", side_effect=OSError)
+    def test_publisher_does_not_inherit_credentials_or_ffreport(self, popen):
+        with patch.dict(os.environ, {
+            "RTSP_PASSWORD": "camera-secret",
+            "STREAMING_AZURE_PUBLISH_PASSWORD": "publisher-secret",
+            "STREAMING_AZURE_PASSPHRASE": "srt-secret",
+            "FFREPORT": "file=ffmpeg.log",
+            "PATH": "example-path",
+        }, clear=True), self.assertRaises(OSError):
+            publish_once(["ffmpeg"], StreamDestination("local", "localhost"))
+
+        self.assertEqual(popen.call_args.kwargs["env"], {"PATH": "example-path"})
+
     @patch("streaming.__main__.time.monotonic", side_effect=[0, 0, 60, 60])
     @patch("streaming.__main__.time.sleep")
     @patch("streaming.__main__.publish_once", return_value="Esperando receptor local")
@@ -243,7 +273,8 @@ class StreamingProcessTests(unittest.TestCase):
 
     @patch("streaming.__main__.initialize_ffmpeg", return_value=None)
     @patch("streaming.__main__.initialize_camera")
-    def test_missing_ffmpeg_exits_before_opening_camera(self, camera, _initialize):
+    @patch("streaming.__main__.sys.stdin.isatty", return_value=False)
+    def test_missing_ffmpeg_exits_before_opening_camera(self, _tty, camera, _initialize):
         self.assertEqual(main(), 1)
         camera.assert_not_called()
 
@@ -342,7 +373,12 @@ class StreamingProcessTests(unittest.TestCase):
             "STREAMING_PORT": "8890",
             "STREAMING_TRANSPORT": "srt",
         }
-        with patch.dict(os.environ, settings, clear=True), self.assertLogs(), redirect_stdout(StringIO()):
+        with (
+            patch.dict(os.environ, settings, clear=True),
+            patch("streaming.__main__.sys.stdin.isatty", return_value=False),
+            self.assertLogs(),
+            redirect_stdout(StringIO()),
+        ):
             self.assertEqual(main(), 0)
         self.assertEqual(publish.call_count, 4)
         self.assertEqual(sleep.call_count, 3)

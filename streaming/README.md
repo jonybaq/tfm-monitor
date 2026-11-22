@@ -2,6 +2,21 @@
 
 El módulo inicia y supervisa FFmpeg para enviar la señal de la Tapo por SRT.
 Reutiliza la conexión RTSP de `capture/.env` y el entorno virtual de la raíz.
+
+El menú inicial ofrece **FFmpeg por comando** y **PyAV · RTSP experimental**.
+Para probar PyAV en Windows desde la raíz del repositorio:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install av
+.\.venv\Scripts\python.exe -m streaming
+```
+
+PyAV usa las bibliotecas incluidas en su paquete precompilado y abre la
+cámara y el destino dentro de Python. Las credenciales siguen en la
+configuración local y quedan fuera de los argumentos de los procesos.
+En el paquete probado, PyAV publica por RTSP. Para SRT, selecciona
+**FFmpeg por comando**. Para la primera prueba con PyAV, usa **Local** con
+MediaMTX iniciado.
 Al iniciar, muestra **Comprobando instalación de FFmpeg** y busca el ejecutable
 en `PATH` y en la instalación de WinGet. Al encontrarlo, muestra un **✓ verde**
 y continúa. Los puntos de espera se sustituyen por el resultado en la misma

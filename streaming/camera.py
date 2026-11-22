@@ -17,6 +17,8 @@ from capture.rtsp.config import (
     RtspConfigurationError,
 )
 
+from .ffmpeg_environment import ffmpeg_environment
+
 
 def configure_camera(
     *, interactive: bool, env_file: Path = DEFAULT_ENV_FILE,
@@ -108,6 +110,7 @@ def probe_until(command: list[str], deadline: float) -> bool:
             result = subprocess.run(
                 command, capture_output=True, text=True, encoding="utf-8",
                 errors="replace", timeout=min(8, remaining), check=False,
+                env=ffmpeg_environment(),
                 creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
             )
         except subprocess.TimeoutExpired:

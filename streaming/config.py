@@ -71,7 +71,8 @@ class StreamDestination:
 
     @classmethod
     def from_environment(
-        cls, *, interactive: bool = False, env_file: Path = ENV_FILE
+        cls, *, interactive: bool = False, env_file: Path = ENV_FILE,
+        rtsp_only: bool = False,
     ) -> "StreamDestination":
         lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.is_file() else []
         settings = {}
@@ -90,6 +91,8 @@ class StreamDestination:
         transport = os.getenv(
             "STREAMING_TRANSPORT", settings.get("STREAMING_TRANSPORT", "")
         ).strip().lower()
+        if rtsp_only:
+            transport = "rtsp"
         if not transport:
             transport = choose_transport() if interactive else "srt"
         if transport not in {"srt", "rtsp"}:

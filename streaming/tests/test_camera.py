@@ -49,8 +49,13 @@ class CameraStartupTests(unittest.TestCase):
     def test_requires_a_video_frame(self, run):
         run.return_value = subprocess.CompletedProcess([], 0, "frame=1\n", "")
         camera = RtspConfig("192.0.2.1", "u", "p")
-        with redirect_stdout(StringIO()):
+        with redirect_stdout(StringIO()), patch.dict(os.environ, {
+            "RTSP_PASSWORD": "camera-secret",
+            "FFREPORT": "file=ffmpeg.log",
+            "PATH": "example-path",
+        }, clear=True):
             self.assertTrue(wait_for_camera("ffmpeg", camera))
+        self.assertEqual(run.call_args.kwargs["env"], {"PATH": "example-path"})
 
     @patch("streaming.camera.time.sleep")
     @patch("streaming.camera.time.monotonic", side_effect=[0, 0, 59, 60])

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from collections.abc import Callable
+from functools import partial
 import logging
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ from capture.rtsp.config import RtspConfig, RtspConfigurationError
 from .camera import configure_camera, show_countdown, wait_for_camera
 from .config import StreamDestination, choose_option
 from .console import ConsoleStep, finish_group
+from .ffmpeg_environment import ffmpeg_environment
 
 
 LOGGER = logging.getLogger(__name__)
@@ -87,7 +89,9 @@ def initialize_ffmpeg(*, interactive: bool) -> str | None:
     return executable
 
 
-def initialize_camera(executable: str, *, interactive: bool) -> RtspConfig | None:
+def initialize_camera(
+    executable: str, *, interactive: bool, probe: Callable[..., bool] | None = None,
+) -> RtspConfig | None:
     group = "2. Verificación de la cámara"
     print(group, flush=True)
     prompted = False
@@ -117,9 +121,8 @@ def initialize_camera(executable: str, *, interactive: bool) -> RtspConfig | Non
     video_step = ConsoleStep(CAMERA_VIDEO_CHECK, interactive)
     video_step.start(animate=False)
     try:
-        received = wait_for_camera(
-            executable, camera, interactive=interactive, label="2.2 Vídeo"
-        )
+        check = probe or partial(wait_for_camera, executable)
+        received = check(camera, interactive=interactive, label="2.2 Vídeo")
     except RtspConfigurationError as error:
         video_step.finish(False)
         finish_group(group, False, interactive, 0 if prompted else 3)
@@ -224,6 +227,7 @@ def publish_once(
     with subprocess.Popen(
         command, stderr=subprocess.PIPE, stdout=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace",
+        env=ffmpeg_environment(),
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
     ) as process:
         attempt = Attempt()
@@ -276,8 +280,10 @@ def publish_once(
 
 
 def publish(
-    command: list[str], destination: StreamDestination, *, interactive: bool
+    command: list[str], destination: StreamDestination, *, interactive: bool,
+    attempt: Callable[..., str] | None = None,
 ) -> int:
+    send = attempt or partial(publish_once, command, destination)
     mode = "Local" if destination.mode == "local" else "Azure"
     ConsoleStep(f"3. Destino elegido · {mode}", interactive).finish(True)
     protocol = destination.transport.upper()
@@ -323,8 +329,7 @@ def publish(
                     destination.waiting_message, address,
                 )
                 return 1
-            message = publish_once(
-                command, destination,
+            message = send(
                 start_timeout=START_TIMEOUT if connected else min(START_TIMEOUT, remaining),
                 on_connected=confirm_connection,
                 interactive=interactive,
@@ -350,6 +355,28 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         interactive = sys.stdin.isatty()
+        if interactive and choose_option(
+            "¿Cómo ejecutar el emisor?",
+            ("FFmpeg por comando", "PyAV · RTSP experimental"),
+            clear_on_select=True,
+        ) == 1:
+            from .pyav_sender import PyAvSender
+
+            step = ConsoleStep("1. Comprobando instalación de PyAV", interactive)
+            step.start()
+            try:
+                sender = PyAvSender()
+            except ValueError:
+                step.finish(False)
+                raise
+            step.finish(True)
+            camera = initialize_camera("", interactive=True, probe=sender.probe)
+            if camera is None:
+                return 1
+            destination = StreamDestination.from_environment(interactive=True, rtsp_only=True)
+            return publish(
+                [], destination, interactive=True, attempt=partial(sender.send, camera, destination)
+            )
         executable = initialize_ffmpeg(interactive=interactive)
         if executable is None:
             return 1
