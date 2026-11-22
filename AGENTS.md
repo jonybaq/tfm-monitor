@@ -314,6 +314,15 @@ herramientas ejecutadas, sus resultados y las que no aplicaron o quedaron
 pendientes. Corregir y volver a verificar las regresiones introducidas
 por el cambio antes de mover la tarea a Done.
 
+Antes de registrar hallazgos nuevos, consultar el informe del componente
+y las tareas cerradas en TaskView. Verificar que las correcciones previas
+relacionadas con los archivos modificados sigan vigentes y registrar la
+evidencia. Si reaparece un falso positivo, conservar su ID, herramienta,
+regla, ubicación y justificación, y registrar la coincidencia en la
+revisión actual. Reutilizar la decisión únicamente si sigue siendo válida
+para el flujo actual. Si cambia la evidencia, revisar el hallazgo con el
+mismo ID.
+
 ### Unitarios
 
 Toda corrección de una tarea debe quedar cubierta por pruebas unitarias.
