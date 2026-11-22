@@ -15,6 +15,34 @@ from streaming.camera import configure_camera, show_countdown, wait_for_camera
 
 
 class CameraStartupTests(unittest.TestCase):
+    def test_interactive_invalid_host_is_rejected_before_saving(self):
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            env_file = Path(directory) / ".env"
+            with (
+                patch("builtins.input", return_value="camera.local:554"),
+                redirect_stdout(StringIO()),
+                self.assertRaisesRegex(RtspConfigurationError, "RTSP_HOST"),
+            ):
+                configure_camera(interactive=True, env_file=env_file)
+            self.assertFalse(env_file.exists())
+
+    @patch("streaming.__main__.wait_for_camera")
+    def test_invalid_saved_address_stops_before_camera_probe(self, probe):
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
+            env_file = Path(directory) / ".env"
+            env_file.write_text(
+                "RTSP_HOST=192.0.2.1/stream1\nRTSP_USERNAME=user\nRTSP_PASSWORD=secret\n",
+                encoding="utf-8",
+            )
+            with (
+                patch("streaming.__main__.configure_camera", side_effect=lambda **kwargs:
+                      configure_camera(env_file=env_file, **kwargs)),
+                redirect_stdout(StringIO()) as output,
+            ):
+                self.assertIsNone(initialize_camera("ffmpeg", interactive=False))
+        probe.assert_not_called()
+        self.assertIn("RTSP_HOST", output.getvalue())
+
     @patch("streaming.camera.time.monotonic", side_effect=[0.0, 1.0, 2.0])
     def test_countdown_rewrites_one_line(self, _clock):
         stopped = Mock()

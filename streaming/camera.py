@@ -15,6 +15,7 @@ from capture.rtsp.config import (
     MissingRtspConfiguration,
     RtspConfig,
     RtspConfigurationError,
+    validate_rtsp_host,
 )
 
 from .ffmpeg_environment import ffmpeg_environment
@@ -46,8 +47,8 @@ def configure_camera(
         value = raw.strip()
         if not value or any(character in raw for character in "\r\n\x00"):
             raise RtspConfigurationError(f"{key} está vacío o no es válido.")
-        if key == "RTSP_HOST" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*", value):
-            raise RtspConfigurationError("RTSP_HOST debe ser una IP o un nombre válido.")
+        if key == "RTSP_HOST":
+            validate_rtsp_host(value)
         if key == "RTSP_PASSWORD" and raw != value:
             raise RtspConfigurationError("RTSP_PASSWORD tiene espacios en los extremos.")
         values[key] = value

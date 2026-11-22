@@ -10,6 +10,37 @@ from rtsp.config import RtspConfig, RtspConfigurationError
 
 
 class RtspConfigTests(unittest.TestCase):
+    def test_rejects_invalid_addresses_from_environment(self) -> None:
+        for host in ("192.0.2.1/stream1", "camera.local:554", "999.1.1.1", "cam..local"):
+            with self.subTest(host=host), patch.dict(os.environ, {
+                "RTSP_HOST": host, "RTSP_USERNAME": "user", "RTSP_PASSWORD": "secret",
+            }, clear=True):
+                with self.assertRaisesRegex(RtspConfigurationError, "RTSP_HOST"):
+                    RtspConfig.from_environment(Path("nonexistent-test.env"))
+
+    def test_rejects_invalid_stream_paths_from_local_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            env_file = Path(directory) / ".env"
+            for path in ("", "/", "stream 1", "stream1?x=1", "stream1#fragment", "stream%zz"):
+                with self.subTest(path=path), patch.dict(os.environ, {}, clear=True):
+                    env_file.write_text(
+                        "RTSP_HOST=camera.local\nRTSP_USERNAME=user\nRTSP_PASSWORD=secret\n"
+                        f"RTSP_STREAM_PATH={path}\n",
+                        encoding="utf-8",
+                    )
+                    with self.assertRaisesRegex(RtspConfigurationError, "RTSP_STREAM_PATH"):
+                        RtspConfig.from_environment(env_file)
+
+    def test_accepts_ipv6_and_preserves_nested_path(self) -> None:
+        with patch.dict(os.environ, {
+            "RTSP_HOST": "2001:db8::1",
+            "RTSP_USERNAME": "user",
+            "RTSP_PASSWORD": "secret",
+            "RTSP_STREAM_PATH": "/live/stream%32",
+        }, clear=True):
+            config = RtspConfig.from_environment(Path("nonexistent-test.env"))
+        self.assertEqual(config.url, "rtsp://user:secret@[2001:db8::1]:554/live/stream%32")
+
     def test_repr_and_str_hide_credentials(self) -> None:
         config = RtspConfig("127.0.0.1", "usuario_ficticio", "clave_ficticia")
         for output in (repr(config), str(config)):
