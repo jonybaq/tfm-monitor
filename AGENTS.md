@@ -303,6 +303,17 @@ corregirlo y nivel de riesgo. Ordenar las alertas de baja a media y alta,
 y poner las desconocidas al final. Usar bajo, medio o alto para el riesgo
 cuando haya evidencia suficiente. Incluir en la solución cómo verificarla.
 
+Después de cada corrección y antes de cerrar la tarea, repetir la revisión
+de seguridad y calidad sobre los archivos modificados y las imágenes
+afectadas. Usar Bandit para Python, Trivy para las imágenes afectadas y
+Codex Security si está disponible. Revisar también los resultados de Ruff
+y SonarQube Cloud cuando apliquen. Comparar con el análisis anterior para
+distinguir los hallazgos nuevos de los preexistentes, incluidos los
+problemas de rendimiento y mantenibilidad. Registrar en TaskView las
+herramientas ejecutadas, sus resultados y las que no aplicaron o quedaron
+pendientes. Corregir y volver a verificar las regresiones introducidas
+por el cambio antes de mover la tarea a Done.
+
 ### Unitarios
 
 Toda corrección de una tarea debe quedar cubierta por pruebas unitarias.
