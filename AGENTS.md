@@ -323,6 +323,21 @@ revisión actual. Reutilizar la decisión únicamente si sigue siendo válida
 para el flujo actual. Si cambia la evidencia, revisar el hallazgo con el
 mismo ID.
 
+Cerrar cada tarea cuando la revisión posterior confirme que el hallazgo
+original quedó resuelto y que la herramienta que lo detectó ya no lo
+reporta en el código corregido. Registrar el resultado y la evidencia
+del nuevo análisis en TaskView. Para los falsos positivos, registrar la
+justificación y comprobar el estado del aviso en la herramienta cuando
+esta permita clasificarlo.
+
+Registrar los hallazgos nuevos en tareas separadas de la corrección que
+los hizo visibles. Agrupar en una tarea las ocurrencias del mismo
+problema que compartan causa o corrección y usar el nombre concreto del
+hallazgo en el título. En la descripción, nombrar todas las herramientas
+que lo detectaron y listar cada archivo, línea y enlace al aviso cuando
+estén disponibles. Si varias herramientas señalan la misma ocurrencia,
+registrarla una sola vez y añadir sus herramientas y referencias.
+
 ### Unitarios
 
 Toda corrección de una tarea debe quedar cubierta por pruebas unitarias.
