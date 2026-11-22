@@ -21,7 +21,10 @@ class RtspConfigTests(unittest.TestCase):
     def test_rejects_invalid_stream_paths_from_local_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env"
-            for path in ("", "/", "stream 1", "stream1?x=1", "stream1#fragment", "stream%zz"):
+            for path in (
+                "", "/", "stream 1", "stream1?x=1", "stream1#fragment",
+                "stream%zz", "stream%", "stream%2", "stream%+2", "cámara",
+            ):
                 with self.subTest(path=path), patch.dict(os.environ, {}, clear=True):
                     env_file.write_text(
                         "RTSP_HOST=camera.local\nRTSP_USERNAME=user\nRTSP_PASSWORD=secret\n"
@@ -30,6 +33,16 @@ class RtspConfigTests(unittest.TestCase):
                     )
                     with self.assertRaisesRegex(RtspConfigurationError, "RTSP_STREAM_PATH"):
                         RtspConfig.from_environment(env_file)
+
+    def test_keeps_consecutive_percent_encoded_path_segments(self) -> None:
+        with patch.dict(os.environ, {
+            "RTSP_HOST": "camera.local",
+            "RTSP_USERNAME": "user",
+            "RTSP_PASSWORD": "secret",
+            "RTSP_STREAM_PATH": "/live/cam%20%2F%ab~1",
+        }, clear=True):
+            config = RtspConfig.from_environment(Path("nonexistent-test.env"))
+        self.assertEqual(config.url, "rtsp://user:secret@camera.local:554/live/cam%20%2F%ab~1")
 
     def test_accepts_ipv6_and_preserves_nested_path(self) -> None:
         with patch.dict(os.environ, {

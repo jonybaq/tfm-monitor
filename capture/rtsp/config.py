@@ -7,11 +7,12 @@ from ipaddress import ip_address
 import os
 from pathlib import Path
 import re
+from string import ascii_letters, digits, hexdigits
 from urllib.parse import quote
 
 DEFAULT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 HOST_LABEL = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
-STREAM_PATH = re.compile(r"(?:[A-Za-z0-9._~!$&'()*+,;=:@/-]|%[0-9A-Fa-f]{2})+")
+STREAM_PATH_CHARS = frozenset(ascii_letters + digits + "._~!$&'()*+,;=:@/-")
 
 
 class RtspConfigurationError(ValueError):
@@ -44,6 +45,22 @@ def validate_rtsp_host(host: str) -> None:
         if "%" not in address and (address == host or ip.version == 6):
             return
     raise RtspConfigurationError("RTSP_HOST debe ser una IP o un nombre válido.")
+
+
+def _is_valid_stream_path(path: str) -> bool:
+    """Check each path character or percent escape once."""
+    index = 0
+    while index < len(path):
+        character = path[index]
+        if character in STREAM_PATH_CHARS:
+            index += 1
+            continue
+        if character != "%" or index + 2 >= len(path):
+            return False
+        if path[index + 1] not in hexdigits or path[index + 2] not in hexdigits:
+            return False
+        index += 3
+    return bool(path)
 
 
 @dataclass(frozen=True)
@@ -94,7 +111,7 @@ class RtspConfig:
             raise RtspConfigurationError("RTSP_PORT debe estar entre 1 y 65535.")
 
         stream_path = os.getenv("RTSP_STREAM_PATH", "stream1").strip()
-        if not STREAM_PATH.fullmatch(stream_path.lstrip("/")):
+        if not _is_valid_stream_path(stream_path.lstrip("/")):
             raise RtspConfigurationError(
                 "RTSP_STREAM_PATH debe contener una ruta válida sin consulta ni fragmento."
             )
