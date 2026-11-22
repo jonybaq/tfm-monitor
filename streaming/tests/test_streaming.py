@@ -239,6 +239,18 @@ class StreamingConfigTests(unittest.TestCase):
 
 
 class StreamingProcessTests(unittest.TestCase):
+    @patch("streaming.__main__.threading.Thread")
+    @patch("streaming.__main__.subprocess.Popen")
+    def test_missing_diagnostics_stops_ffmpeg_before_starting_reader(self, popen, thread):
+        process = popen.return_value.__enter__.return_value
+        process.stderr = None
+        process.poll.return_value = None
+        with self.assertRaisesRegex(StreamingError, "canal de diagnóstico"):
+            publish_once(["ffmpeg"], StreamDestination("local", "localhost"))
+        thread.assert_not_called()
+        process.terminate.assert_called_once_with()
+        process.wait.assert_called_once_with(timeout=2)
+
     @patch("streaming.__main__.sys.stdin.isatty", return_value=False)
     @patch("streaming.__main__.initialize_ffmpeg")
     def test_expected_error_keeps_its_actionable_message(self, initialize, _tty):

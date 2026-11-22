@@ -1,7 +1,7 @@
 """Arranca y supervisa la publicación RTSP a SRT."""
 
 from dataclasses import dataclass, field
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import partial
 import logging
 import os
@@ -223,10 +223,9 @@ class Attempt:
             self.issue = "La instalación de FFmpeg no admite el flujo configurado."
 
 
-def read_progress(process: subprocess.Popen[str], attempt: Attempt) -> None:
+def read_progress(diagnostics: Iterable[str], attempt: Attempt) -> None:
     # FFmpeg puede incluir credenciales en stderr. Solo publicamos estados propios.
-    assert process.stderr is not None
-    for line in process.stderr:
+    for line in diagnostics:
         attempt.read(line, time.monotonic())
 
 
@@ -243,10 +242,14 @@ def publish_once(
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
     ) as process:
         attempt = Attempt()
-        reader = threading.Thread(
-            target=read_progress, args=(process, attempt), daemon=True
-        )
+        reader = None
         try:
+            diagnostics = process.stderr
+            if diagnostics is None:
+                raise StreamingError("No se pudo abrir el canal de diagnóstico de FFmpeg.")
+            reader = threading.Thread(
+                target=read_progress, args=(diagnostics, attempt), daemon=True
+            )
             reader.start()
             _monitor_attempt(process, attempt, destination, start_timeout, on_connected, interactive)
         finally:
@@ -307,7 +310,7 @@ def _stop_attempt(process, reader):
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait()
-    if reader.ident is not None:
+    if reader is not None and reader.ident is not None:
         reader.join(timeout=2)
 
 
