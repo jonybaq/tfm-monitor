@@ -42,6 +42,49 @@ def format_progress(
     )
 
 
+class PublicationProgress:
+    def __init__(self) -> None:
+        self.frames = 0
+        self.payload_bytes = 0
+        self.last_frames = 0
+        self.last_update = time.monotonic()
+
+    def record_video(self, size: int, interactive: bool) -> None:
+        self.frames += 1
+        self.payload_bytes += size
+        now = time.monotonic()
+        interval = now - self.last_update
+        if interactive and interval >= 1:
+            stats = format_progress(
+                self.frames, self.frames - self.last_frames, interval, self.payload_bytes,
+            )
+            print(f"\r{stats}\033[K", end="", flush=True)
+            self.last_update = now
+            self.last_frames = self.frames
+
+
+class OpusTrack:
+    def __init__(self, av, output) -> None:
+        self.stream = output.add_stream("libopus", rate=AUDIO_RATE)
+        self.stream.layout = "mono"
+        self.stream.bit_rate = 32000
+        self.resampler = av.audio.resampler.AudioResampler(
+            format="s16", layout="mono", rate=AUDIO_RATE,
+        )
+        self.sample_index = 0
+
+    def forward(self, packet, output) -> int:
+        payload_bytes = 0
+        for frame in packet.decode():
+            frame.pts = None
+            for sample in self.resampler.resample(frame):
+                self.sample_index = set_audio_timestamp(sample, self.sample_index)
+                for encoded in self.stream.encode(sample):
+                    output.mux(encoded)
+                    payload_bytes += encoded.size
+        return payload_bytes
+
+
 class PyAvSender:
     def __init__(self) -> None:
         try:
@@ -96,12 +139,8 @@ class PyAvSender:
         if destination.transport != "rtsp":
             raise ValueError("El modo experimental de PyAV requiere RTSP.")
         camera_opened = False
-        published = False
-        started = last_update = time.monotonic()
-        frames = 0
-        last_frames = 0
-        payload_bytes = 0
-        audio_samples = 0
+        progress = PublicationProgress()
+        started = time.monotonic()
         try:
             with self._open_camera(
                 camera, min(start_timeout, 5),
@@ -114,51 +153,10 @@ class PyAvSender:
                     destination.url, mode="w", format="rtsp",
                     options={"rtsp_transport": "tcp"}, timeout=(min(start_timeout, 5), 5),
                 ) as output:
-                    video = source.streams.video[0]
-                    video_out = output.add_stream_from_template(video)
-                    streams = [video]
-                    if destination.audio_enabled:
-                        audio = source.streams.audio[0]
-                        streams.append(audio)
-                        audio_out = output.add_stream("libopus", rate=AUDIO_RATE)
-                        audio_out.layout = "mono"
-                        audio_out.bit_rate = 32000
-                        resampler = self.av.audio.resampler.AudioResampler(
-                            format="s16", layout="mono", rate=AUDIO_RATE,
-                        )
-                    output.start_encoding()
-                    for packet in source.demux(streams):
-                        now = time.monotonic()
-                        if not published and now - started >= start_timeout:
-                            break
-                        if packet.stream == video:
-                            if not packet.size:
-                                continue
-                            set_video_timestamp(packet, frames)
-                            packet.stream = video_out
-                            output.mux(packet)
-                            payload_bytes += packet.size
-                            frames += 1
-                            if not published:
-                                published = True
-                                on_connected()
-                                media = "vídeo y audio" if destination.audio_enabled else "vídeo"
-                                LOGGER.info("Enviando %s (%s) con PyAV", media, destination.mode)
-                            if interactive and now - last_update >= 1:
-                                stats = format_progress(
-                                    frames, frames - last_frames, now - last_update, payload_bytes,
-                                )
-                                print(f"\r{stats}\033[K", end="", flush=True)
-                                last_update = now
-                                last_frames = frames
-                        else:
-                            for frame in packet.decode():
-                                frame.pts = None
-                                for sample in resampler.resample(frame):
-                                    audio_samples = set_audio_timestamp(sample, audio_samples)
-                                    for encoded in audio_out.encode(sample):
-                                        output.mux(encoded)
-                                        payload_bytes += encoded.size
+                    self._publish_packets(
+                        source, output, destination, started + start_timeout,
+                        on_connected, interactive, progress,
+                    )
         except self.av.error.HTTPUnauthorizedError:
             target = "El receptor" if camera_opened else "La cámara"
             raise ValueError(f"{target} rechazó las credenciales RTSP.") from None
@@ -166,8 +164,44 @@ class PyAvSender:
             # The exception message and filename may contain authenticated URLs.
             LOGGER.warning("PyAV interrumpió la conexión (código %d).", error.errno)
         finally:
-            if published and interactive:
+            if progress.frames and interactive:
                 print(flush=True)
-        if published:
+        if progress.frames:
             return "Envío interrumpido. Volviendo a conectar"
         return destination.waiting_message if camera_opened else "Esperando conexión de la cámara"
+
+    def _publish_packets(
+        self, source, output, destination: StreamDestination, deadline: float,
+        on_connected: Callable[[], None], interactive: bool,
+        progress: PublicationProgress,
+    ) -> None:
+        video = source.streams.video[0]
+        video_out = output.add_stream_from_template(video)
+        streams = [video]
+        audio = None
+        if destination.audio_enabled:
+            streams.append(source.streams.audio[0])
+            audio = OpusTrack(self.av, output)
+        output.start_encoding()
+        for packet in source.demux(streams):
+            if not progress.frames and time.monotonic() >= deadline:
+                return
+            if packet.stream != video:
+                if audio is not None:
+                    progress.payload_bytes += audio.forward(packet, output)
+                continue
+            if not packet.size:
+                continue
+            set_video_timestamp(packet, progress.frames)
+            packet.stream = video_out
+            output.mux(packet)
+            progress.record_video(packet.size, interactive)
+            if progress.frames == 1:
+                self._report_connected(destination, on_connected)
+
+    def _report_connected(
+        self, destination: StreamDestination, on_connected: Callable[[], None],
+    ) -> None:
+        on_connected()
+        media = "vídeo y audio" if destination.audio_enabled else "vídeo"
+        LOGGER.info("Enviando %s (%s) con PyAV", media, destination.mode)

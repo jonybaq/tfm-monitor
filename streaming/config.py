@@ -29,19 +29,25 @@ def choose_option(
             for index, option in enumerate(options)
         ]
         print("\n".join(labels), flush=True)
-        while True:
-            key = getwch()
-            if key == "\r":
-                if clear_on_select:
-                    clear_menu = "\033[4A\r" + "\033[2K\033[1B" * 3 + "\033[2K\033[3A"
-                    print(clear_menu, end="", flush=True)
-                return selected
-            if key in {"\x03", "\x1b"}:
-                raise KeyboardInterrupt
-            if key in {"\x00", "\xe0"} and getwch() in {"H", "P"}:
-                selected = 1 - selected
-                redraw = True
-                break
+        key = _read_menu_key(getwch)
+        if key == "enter":
+            if clear_on_select:
+                clear_menu = "\033[4A\r" + "\033[2K\033[1B" * 3 + "\033[2K\033[3A"
+                print(clear_menu, end="", flush=True)
+            return selected
+        selected = 1 - selected
+        redraw = True
+
+
+def _read_menu_key(read_key) -> str:
+    while True:
+        key = read_key()
+        if key == "\r":
+            return "enter"
+        if key in {"\x03", "\x1b"}:
+            raise KeyboardInterrupt
+        if key in {"\x00", "\xe0"} and read_key() in {"H", "P"}:
+            return "arrow"
 
 
 def choose_mode() -> str:
@@ -100,23 +106,16 @@ def _prompt_missing_destination(
     azure_rtsp = mode == "azure" and transport == "rtsp"
     needs_phrase = mode == "azure" and transport == "srt"
     save = {}
-    missing = [
-        key for key, value in ((host_key, host), (port_key, port_text))
-        if not value
-    ]
-    if needs_phrase and not passphrase:
-        missing.append(phrase_key)
-    if azure_rtsp and not publish_password:
-        missing.append(password_key)
+    required = {host_key: host, port_key: port_text}
+    if needs_phrase:
+        required[phrase_key] = passphrase
+    if azure_rtsp:
+        required[password_key] = publish_password
+    missing = [key for key, value in required.items() if not value]
     if missing:
         print("Falta configurar en streaming/.env: " + ", ".join(missing), flush=True)
     if not host:
-        if mode == "local":
-            host = input("IP o DNS del receptor local [127.0.0.1]: ").strip()
-            host = host or "127.0.0.1"
-        else:
-            host = input("IP pública o DNS de tapo-media: ").strip()
-        save[host_key] = host
+        save[host_key] = _prompt_host(mode)
     if not port_text:
         port_text = input(
             f"Puerto {transport.upper()} [{default_port}]: "
@@ -131,6 +130,33 @@ def _prompt_missing_destination(
     return save
 
 
+def _prompt_host(mode: str) -> str:
+    if mode == "local":
+        return input("IP o DNS del receptor local [127.0.0.1]: ").strip() or "127.0.0.1"
+    return input("IP pública o DNS de tapo-media: ").strip()
+
+
+def _validate_publish_password(azure_rtsp: bool, publish_password: str, password_key: str) -> None:
+    if azure_rtsp and not publish_password:
+        raise ValueError(f"Configura {password_key} para publicar por RTSP en Azure.")
+    if publish_password and not re.fullmatch(r"[A-Za-z0-9_-]{16,79}", publish_password):
+        raise ValueError(f"{password_key} debe tener entre 16 y 79 letras, números, guiones o guiones bajos.")
+
+
+def _validate_passphrase(passphrase: str, required: bool) -> None:
+    if any(character in passphrase for character in "\r\n\x00") or (
+        (required or passphrase) and not 10 <= len(passphrase.encode("utf-8")) <= 79
+    ):
+        raise ValueError("La frase SRT debe contener entre 10 y 79 bytes.")
+
+
+def _read_switch(key: str, value: str) -> bool:
+    value = value.strip().lower()
+    if value not in {"on", "off"}:
+        raise ValueError(f"{key} debe ser on u off.")
+    return value == "on"
+
+
 def _validate_destination(
     *, mode: str, azure_rtsp: bool, needs_phrase: bool, host: str, host_key: str,
     port_text: str, port_key: str, default_port: str, passphrase: str,
@@ -138,29 +164,20 @@ def _validate_destination(
 ) -> tuple[str, int, bool, bool]:
     if not host and mode == "local":
         host = "127.0.0.1"
-    if azure_rtsp and not publish_password:
-        raise ValueError(f"Configura {password_key} para publicar por RTSP en Azure.")
-    if publish_password and not re.fullmatch(r"[A-Za-z0-9_-]{16,79}", publish_password):
-        raise ValueError(f"{password_key} debe tener entre 16 y 79 letras, números, guiones o guiones bajos.")
+    _validate_publish_password(azure_rtsp, publish_password, password_key)
     if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?", host):
         raise ValueError(f"{host_key} debe ser una IP IPv4 o un nombre DNS.")
-    if any(character in passphrase for character in "\r\n\x00") or (
-        (needs_phrase or passphrase) and not 10 <= len(passphrase.encode("utf-8")) <= 79
-    ):
-        raise ValueError("La frase SRT debe contener entre 10 y 79 bytes.")
+    _validate_passphrase(passphrase, needs_phrase)
     try:
         port = int(port_text or default_port)
     except ValueError:
         port = 0
     if not 1 <= port <= 65535:
         raise ValueError(f"{port_key} debe estar entre 1 y 65535.")
-    audio = audio.strip().lower()
-    if audio not in {"on", "off"}:
-        raise ValueError("STREAMING_AUDIO debe ser on u off.")
-    low_latency = low_latency.strip().lower()
-    if low_latency not in {"on", "off"}:
-        raise ValueError("STREAMING_LOW_LATENCY debe ser on u off.")
-    return host, port, audio == "on", low_latency == "on"
+    return (
+        host, port, _read_switch("STREAMING_AUDIO", audio),
+        _read_switch("STREAMING_LOW_LATENCY", low_latency),
+    )
 
 
 def _save_settings(env_file: Path, lines: list[str], values: dict[str, str]) -> None:

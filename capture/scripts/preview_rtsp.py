@@ -23,6 +23,31 @@ from rtsp.latest_frame import LatestFrameCapture
 METRICS_LOG_INTERVAL_SECONDS = 5.0
 
 
+def _show_packet(window_name, packet, metrics) -> float:
+    frame = packet.image
+    frame_age_ms = (time.monotonic() - packet.captured_at) * 1000
+    status = "conectada" if metrics.connected else "desconectada"
+    lines = (
+        f"Captura: {metrics.capture_fps:.1f} FPS",
+        f"Edad local del frame: {frame_age_ms:.0f} ms",
+        f"Conexión: {status}",
+        f"Errores: {metrics.read_failures} | Intentos: {metrics.connection_attempts}",
+        f"Reconexiones exitosas: {metrics.reconnects}",
+    )
+    for index, line in enumerate(lines):
+        cv2.putText(
+            frame,
+            line,
+            (10, 30 + index * 30),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 255, 0),
+            2,
+        )
+    cv2.imshow(window_name, frame)
+    return frame_age_ms
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = RtspConfig.from_environment()
@@ -55,28 +80,8 @@ def main() -> None:
             if packet.sequence == displayed_sequence:
                 time.sleep(0.005)
                 continue
-            frame = packet.image
             metrics = capture.metrics()
-            frame_age_ms = (time.monotonic() - packet.captured_at) * 1000
-            status = "conectada" if metrics.connected else "desconectada"
-            lines = (
-                f"Captura: {metrics.capture_fps:.1f} FPS",
-                f"Edad local del frame: {frame_age_ms:.0f} ms",
-                f"Conexión: {status}",
-                f"Errores: {metrics.read_failures} | Intentos: {metrics.connection_attempts}",
-                f"Reconexiones exitosas: {metrics.reconnects}",
-            )
-            for index, line in enumerate(lines):
-                cv2.putText(
-                    frame,
-                    line,
-                    (10, 30 + index * 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (0, 255, 0),
-                    2,
-                )
-            cv2.imshow(window_name, frame)
+            frame_age_ms = _show_packet(window_name, packet, metrics)
             displayed_sequence = packet.sequence
             now = time.monotonic()
             if now - last_metrics_log_at >= METRICS_LOG_INTERVAL_SECONDS:

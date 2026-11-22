@@ -118,16 +118,25 @@ def initialize_camera(
         raise
     config_step.finish(True)
 
+    check = probe or partial(wait_for_camera, executable)
+    if _check_camera_video(camera, check, group, interactive, prompted):
+        return camera
+    return None
+
+
+def _check_camera_video(
+    camera: RtspConfig, check: Callable[..., bool], group: str,
+    interactive: bool, prompted: bool,
+) -> bool:
     video_step = ConsoleStep(CAMERA_VIDEO_CHECK, interactive)
     video_step.start(animate=False)
     try:
-        check = probe or partial(wait_for_camera, executable)
         received = check(camera, interactive=interactive, label="2.2 Vídeo")
     except RtspConfigurationError as error:
         video_step.finish(False)
         finish_group(group, False, interactive, 0 if prompted else 3)
         print(f"{error} Corrige capture/.env y vuelve a iniciar.", flush=True)
-        return None
+        return False
     except (KeyboardInterrupt, OSError):
         video_step.finish(False)
         finish_group(group, False, interactive, 0 if prompted else 3)
@@ -140,8 +149,8 @@ def initialize_camera(
             "Verifica la conexión y corrige capture/.env si corresponde.",
             flush=True,
         )
-        return None
-    return camera
+        return False
+    return True
 
 
 def ffmpeg_command(
@@ -200,6 +209,9 @@ class Attempt:
                 self.frames = int(value)
                 self.last_progress = now
 
+        self._read_issue(line)
+
+    def _read_issue(self, line: str) -> None:
         if "matches no streams" in line:
             self.issue = "La cámara no entrega las pistas requeridas."
         elif "401 Unauthorized" in line:
@@ -234,41 +246,11 @@ def publish_once(
         reader = threading.Thread(
             target=read_progress, args=(process, attempt), daemon=True
         )
-        started = time.monotonic()
-        announced = False
-        displayed_stats = ""
         try:
             reader.start()
-            while process.poll() is None:
-                last_progress = attempt.last_progress
-                if last_progress is not None:
-                    if not announced:
-                        if on_connected is not None:
-                            on_connected()
-                        media = "vídeo y audio" if destination.audio_enabled else "vídeo"
-                        LOGGER.info("Enviando %s (%s)", media, destination.mode)
-                        announced = True
-                    stats = attempt.stats
-                    if interactive and stats and stats != displayed_stats:
-                        print(f"\r{stats}\033[K", end="", flush=True)
-                        displayed_stats = stats
-                    if time.monotonic() - last_progress >= STALL_TIMEOUT:
-                        break
-                elif time.monotonic() - started >= start_timeout:
-                    break
-                time.sleep(0.2)
+            _monitor_attempt(process, attempt, destination, start_timeout, on_connected, interactive)
         finally:
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=2)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
-            if reader.ident is not None:
-                reader.join(timeout=2)
-            if displayed_stats:
-                print(flush=True)
+            _stop_attempt(process, reader)
 
     if attempt.issue:
         raise ValueError(attempt.issue)
@@ -277,6 +259,56 @@ def publish_once(
     if attempt.camera_opened:
         return destination.waiting_message
     return CAMERA_WAIT
+
+
+def _monitor_attempt(process, attempt, destination, start_timeout, on_connected, interactive):
+    started = time.monotonic()
+    announced = False
+    displayed_stats = ""
+    try:
+        while process.poll() is None:
+            last_progress = attempt.last_progress
+            if last_progress is None:
+                if time.monotonic() - started >= start_timeout:
+                    return
+                time.sleep(0.2)
+                continue
+            if not announced:
+                _announce_stream(destination, on_connected)
+                announced = True
+            displayed_stats = _display_progress(interactive, attempt.stats, displayed_stats)
+            if time.monotonic() - last_progress >= STALL_TIMEOUT:
+                return
+            time.sleep(0.2)
+    finally:
+        if displayed_stats:
+            print(flush=True)
+
+
+def _display_progress(interactive: bool, stats: str, previous: str) -> str:
+    if interactive and stats and stats != previous:
+        print(f"\r{stats}\033[K", end="", flush=True)
+        return stats
+    return previous
+
+
+def _announce_stream(destination, on_connected):
+    if on_connected is not None:
+        on_connected()
+    media = "vídeo y audio" if destination.audio_enabled else "vídeo"
+    LOGGER.info("Enviando %s (%s)", media, destination.mode)
+
+
+def _stop_attempt(process, reader):
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+    if reader.ident is not None:
+        reader.join(timeout=2)
 
 
 def publish(
@@ -318,29 +350,11 @@ def publish(
             connected = True
             finish_check(True)
 
-    previous = ""
     try:
-        while True:
-            remaining = deadline - time.monotonic()
-            if not connected and remaining <= 0:
-                finish_check(False)
-                LOGGER.error(
-                    "%s. Revisa que %s esté en ejecución y verifica streaming/.env.",
-                    destination.waiting_message, address,
-                )
-                return 1
-            message = send(
-                start_timeout=START_TIMEOUT if connected else min(START_TIMEOUT, remaining),
-                on_connected=confirm_connection,
-                interactive=interactive,
-            )
-            if connected and (message != previous or message == INTERRUPTED):
-                LOGGER.warning(message)
-                previous = message
-            pause = RETRY_SECONDS if connected else max(
-                0, min(RETRY_SECONDS, deadline - time.monotonic())
-            )
-            time.sleep(pause)
+        return _retry_publication(
+            send, destination, interactive, deadline, address,
+            lambda: connected, finish_check, confirm_connection,
+        )
     except (KeyboardInterrupt, ValueError, OSError):
         if not connected:
             finish_check(False)
@@ -349,6 +363,34 @@ def publish(
         stopped.set()
         if countdown is not None:
             countdown.join()
+
+
+def _retry_publication(
+    send, destination, interactive, deadline, address,
+    is_connected, finish_check, confirm_connection,
+) -> int:
+    previous = ""
+    while True:
+        remaining = deadline - time.monotonic()
+        if not is_connected() and remaining <= 0:
+            finish_check(False)
+            LOGGER.error(
+                "%s. Revisa que %s esté en ejecución y verifica streaming/.env.",
+                destination.waiting_message, address,
+            )
+            return 1
+        message = send(
+            start_timeout=START_TIMEOUT if is_connected() else min(START_TIMEOUT, remaining),
+            on_connected=confirm_connection,
+            interactive=interactive,
+        )
+        if is_connected() and (message != previous or message == INTERRUPTED):
+            LOGGER.warning(message)
+            previous = message
+        pause = RETRY_SECONDS if is_connected() else max(
+            0, min(RETRY_SECONDS, deadline - time.monotonic())
+        )
+        time.sleep(pause)
 
 
 def main() -> int:

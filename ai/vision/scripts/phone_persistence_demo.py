@@ -71,6 +71,45 @@ class DetectionTimer:
         return self._duration, state.persistence_reached
 
 
+def _draw_results(
+    frame, device, phone_detections, remote_detections,
+    phone_duration, remote_duration, phone_reached, remote_reached,
+    phone_elapsed, remote_elapsed,
+) -> None:
+    for detection in phone_detections:
+        box = detection.bounding_box
+        start = (round(box.x1), round(box.y1))
+        end = (round(box.x2), round(box.y2))
+        cv2.rectangle(frame, start, end, (0, 255, 0), 2)
+        cv2.putText(
+            frame, f"cell phone {detection.confidence:.2f}",
+            (start[0], max(25, start[1] - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2,
+        )
+    for detection in remote_detections:
+        box = detection.bounding_box
+        start = (round(box.x1), round(box.y1))
+        end = (round(box.x2), round(box.y2))
+        cv2.rectangle(frame, start, end, (255, 200, 0), 2)
+        cv2.putText(
+            frame, f"remote {detection.confidence:.2f}",
+            (start[0], max(25, start[1] - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2,
+        )
+    cv2.putText(frame, f"Dispositivo: {device}", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
+    cv2.putText(frame, f"Celular: {phone_duration:.1f} s / 5 s", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+    cv2.putText(frame, f"Control remoto: {remote_duration:.1f} s / 5 s", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2)
+    if phone_reached:
+        cv2.putText(frame, f"CELULAR: UMBRAL ALCANZADO | {phone_elapsed:.1f} s", (10, 120),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255), 2)
+    if remote_reached:
+        cv2.putText(frame, f"CONTROL REMOTO: UMBRAL ALCANZADO | {remote_elapsed:.1f} s", (10, 150),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+
 def main(reminder_seconds: float | None = None) -> None:
     if reminder_seconds is not None and (
         not math.isfinite(reminder_seconds) or reminder_seconds <= 0
@@ -132,38 +171,11 @@ def main(reminder_seconds: float | None = None) -> None:
             report(PHONE_SIGNAL_NAME, phone_reached, phone_timer.seconds_since_report)
             report(REMOTE_SIGNAL_NAME, remote_reached, remote_timer.seconds_since_report)
             frame = packet.image.copy()
-            for detection in phone_detections:
-                box = detection.bounding_box
-                start = (round(box.x1), round(box.y1))
-                end = (round(box.x2), round(box.y2))
-                cv2.rectangle(frame, start, end, (0, 255, 0), 2)
-                cv2.putText(
-                    frame, f"cell phone {detection.confidence:.2f}",
-                    (start[0], max(25, start[1] - 8)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2,
-                )
-            for detection in remote_detections:
-                box = detection.bounding_box
-                start = (round(box.x1), round(box.y1))
-                end = (round(box.x2), round(box.y2))
-                cv2.rectangle(frame, start, end, (255, 200, 0), 2)
-                cv2.putText(
-                    frame, f"remote {detection.confidence:.2f}",
-                    (start[0], max(25, start[1] - 8)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2,
-                )
-            cv2.putText(frame, f"Dispositivo: {result.device}", (10, 90),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
-            cv2.putText(frame, f"Celular: {phone_duration:.1f} s / 5 s", (10, 30),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(frame, f"Control remoto: {remote_duration:.1f} s / 5 s", (10, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 200, 0), 2)
-            if phone_reached:
-                cv2.putText(frame, f"CELULAR: UMBRAL ALCANZADO | {phone_timer.seconds_since_report:.1f} s", (10, 120),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255), 2)
-            if remote_reached:
-                cv2.putText(frame, f"CONTROL REMOTO: UMBRAL ALCANZADO | {remote_timer.seconds_since_report:.1f} s", (10, 150),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            _draw_results(
+                frame, result.device, phone_detections, remote_detections,
+                phone_duration, remote_duration, phone_reached, remote_reached,
+                phone_timer.seconds_since_report, remote_timer.seconds_since_report,
+            )
             cv2.imshow(window_name, frame)
     finally:
         capture.stop()

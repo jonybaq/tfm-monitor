@@ -16,10 +16,19 @@ from streaming.__main__ import (
     main, prepare_ffmpeg, publish,
     publish_once,
 )
-from streaming.config import StreamDestination, choose_mode
+from streaming.config import StreamDestination, choose_mode, choose_option
 
 
 class StreamingConfigTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "win32", "El menú usa la consola de Windows")
+    def test_menu_ignores_unrelated_keys_and_selects_with_arrow(self):
+        with (
+            patch("msvcrt.getwch", side_effect=["x", "\xe0", "P", "\r"]),
+            redirect_stdout(StringIO()) as screen,
+        ):
+            self.assertEqual(choose_option("Destino", ("Local", "Azure")), 1)
+        self.assertIn("> Azure", screen.getvalue())
+
     def test_destination_precedence_for_all_modes_and_transports(self):
         with TemporaryDirectory() as directory:
             env_file = Path(directory) / ".env"

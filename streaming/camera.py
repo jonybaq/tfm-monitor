@@ -35,13 +35,22 @@ def configure_camera(
         print(error, flush=True)
         missing = error.keys
 
+    values = _prompt_camera_settings(missing)
+    lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
+    lines = [line for line in lines if line.partition("=")[0].strip() not in values]
+    lines.extend(f"{key}={value}" for key, value in values.items())
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.environ.update(values)
+    return RtspConfig.from_environment(env_file)
+
+def _prompt_camera_settings(keys: list[str]) -> dict[str, str]:
     values = {}
     labels = {
         "RTSP_HOST": "IP o nombre de la cámara: ",
         "RTSP_USERNAME": "Usuario RTSP: ",
         "RTSP_PASSWORD": "Contraseña RTSP: ",
     }
-    for key in missing:
+    for key in keys:
         read = getpass if key == "RTSP_PASSWORD" else input
         raw = read(labels[key])
         value = raw.strip()
@@ -53,12 +62,7 @@ def configure_camera(
             raise RtspConfigurationError("RTSP_PASSWORD tiene espacios en los extremos.")
         values[key] = value
 
-    lines = env_file.read_text(encoding="utf-8").splitlines() if env_file.exists() else []
-    lines = [line for line in lines if line.partition("=")[0].strip() not in values]
-    lines.extend(f"{key}={value}" for key, value in values.items())
-    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    os.environ.update(values)
-    return RtspConfig.from_environment(env_file)
+    return values
 
 
 def show_countdown(
