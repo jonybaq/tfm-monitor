@@ -1,10 +1,142 @@
 """Regression tests for the experimental sender without requiring PyAV."""
 
+from contextlib import nullcontext, redirect_stdout
 from fractions import Fraction
+from io import StringIO
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, patch
 
-from streaming.pyav_sender import format_progress, set_audio_timestamp, set_video_timestamp
+from capture.rtsp.config import RtspConfig, RtspConfigurationError
+from streaming.config import StreamDestination, StreamingError
+from streaming.pyav_sender import (
+    PyAvSender, format_progress, set_audio_timestamp, set_video_timestamp,
+)
+
+
+class FakeMediaError(Exception):
+    errno = 22
+
+
+class FakeUnauthorized(FakeMediaError):
+    pass
+
+
+class SenderTests(unittest.TestCase):
+    def setUp(self):
+        self.av = Mock()
+        self.av.error = SimpleNamespace(
+            FFmpegError=FakeMediaError, HTTPUnauthorizedError=FakeUnauthorized,
+        )
+        with patch.dict("sys.modules", {"av": self.av}):
+            self.sender = PyAvSender()
+        self.camera = RtspConfig("localhost", "test-user", "test-value")
+        self.destination = StreamDestination("local", "localhost", transport="rtsp")
+        self.connected = Mock()
+
+    def send(self, *, interactive=False):
+        return self.sender.send(
+            self.camera, self.destination, start_timeout=3,
+            on_connected=self.connected, interactive=interactive,
+        )
+
+    def test_missing_library_reports_installation_error(self):
+        with patch.dict("sys.modules", {"av": None}):
+            with self.assertRaisesRegex(StreamingError, "PyAV no está disponible"):
+                PyAvSender()
+
+    def test_probe_recovers_after_read_error_and_waits_for_first_frame(self):
+        source = Mock()
+        source.streams.video = [object()]
+        source.decode.side_effect = [iter(()), iter((object(),))]
+        self.av.open.side_effect = [
+            FakeMediaError(), nullcontext(source), nullcontext(source),
+        ]
+        with patch("streaming.pyav_sender.time.sleep") as sleep:
+            self.assertTrue(self.sender.probe(self.camera, interactive=False, label=""))
+        self.assertEqual(sleep.call_count, 2)
+        source.decode.assert_called_with(video=0)
+
+    def test_interactive_probe_cleans_up_countdown_after_authentication_error(self):
+        self.av.open.side_effect = FakeUnauthorized("internal detail")
+        with patch("streaming.pyav_sender.threading.Thread") as thread:
+            with self.assertRaisesRegex(RtspConfigurationError, "La cámara rechazó"):
+                self.sender.probe(self.camera, interactive=True, label="prueba")
+        thread.return_value.start.assert_called_once()
+        thread.return_value.join.assert_called_once()
+        self.assertTrue(thread.call_args.kwargs["args"][2].is_set())
+
+    def test_probe_expires_without_opening_camera_after_deadline(self):
+        with patch("streaming.pyav_sender.time.monotonic", side_effect=[0, 60]):
+            self.assertFalse(self.sender.probe(self.camera, interactive=False, label=""))
+        self.av.open.assert_not_called()
+
+    def test_send_distinguishes_camera_and_receiver_connection_errors(self):
+        source = Mock()
+        source.streams = SimpleNamespace(video=[object()], audio=[object()])
+        for side_effect, expected in (
+            ([FakeMediaError("private detail")], "Esperando conexión de la cámara"),
+            ([nullcontext(source), FakeMediaError("private detail")], "Esperando receptor local"),
+        ):
+            self.av.open.side_effect = side_effect
+            with self.assertLogs("streaming.pyav_sender", level="WARNING") as logs:
+                self.assertEqual(self.send(), expected)
+            self.assertIn("código 22", logs.output[0])
+            self.assertNotIn("private detail", logs.output[0])
+        self.connected.assert_not_called()
+
+    def test_receiver_auth_failure_reports_controlled_message(self):
+        source = Mock()
+        source.streams = SimpleNamespace(video=[object()], audio=[object()])
+        self.av.open.side_effect = [nullcontext(source), FakeUnauthorized()]
+        with self.assertRaisesRegex(StreamingError, "El receptor rechazó"):
+            self.send()
+
+    def test_send_requires_rtsp_and_the_configured_tracks(self):
+        self.destination = StreamDestination("local", "localhost")
+        with self.assertRaisesRegex(StreamingError, "requiere RTSP"):
+            self.send()
+        self.av.open.assert_not_called()
+        self.destination = StreamDestination("local", "localhost", transport="rtsp")
+        source = Mock()
+        source.streams = SimpleNamespace(video=[object()], audio=[])
+        self.av.open.return_value = nullcontext(source)
+        with self.assertRaisesRegex(StreamingError, "pistas requeridas"):
+            self.send()
+        self.connected.assert_not_called()
+
+    def test_sender_muxes_video_and_opus_and_announces_only_once(self):
+        self.destination = StreamDestination(
+            "local", "localhost", transport="rtsp", low_latency=True,
+        )
+        video, audio = object(), object()
+        source, output = Mock(), Mock()
+        source.streams = SimpleNamespace(video=[video], audio=[audio])
+        empty = SimpleNamespace(stream=video, size=0)
+        first = SimpleNamespace(stream=video, size=100)
+        second = SimpleNamespace(stream=video, size=110)
+        audio_packet, decoded, sample, encoded = Mock(), Mock(), Mock(), Mock()
+        audio_packet.stream = audio
+        audio_packet.decode.return_value = [decoded]
+        sample.samples = 960
+        encoded.size = 80
+        source.demux.return_value = iter([empty, first, audio_packet, second])
+        output.add_stream.return_value.encode.return_value = [encoded]
+        self.av.audio.resampler.AudioResampler.return_value.resample.return_value = [sample]
+        self.av.open.side_effect = [nullcontext(source), nullcontext(output)]
+
+        with patch("streaming.pyav_sender.time.monotonic", side_effect=[0, 0, 0, 0, 1, 2]):
+            with redirect_stdout(StringIO()) as console:
+                self.assertEqual(self.send(interactive=True), "Envío interrumpido. Volviendo a conectar")
+
+        self.assertEqual(self.av.open.call_args_list[0].kwargs["options"]["fflags"], "+nobuffer")
+        self.assertEqual(output.mux.call_count, 3)
+        self.assertEqual(output.mux.call_args_list[0].args, (first,))
+        self.assertEqual(output.mux.call_args_list[1].args, (encoded,))
+        self.assertEqual(output.mux.call_args_list[2].args, (second,))
+        self.assertEqual((first.pts, second.pts, sample.pts), (0, 1, 0))
+        self.connected.assert_called_once()
+        self.assertIn("frame=2", console.getvalue())
 
 
 class VideoTimestampTests(unittest.TestCase):
