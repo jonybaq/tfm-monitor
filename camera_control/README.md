@@ -12,7 +12,7 @@ Desde la raíz del repositorio:
 ```
 
 La primera vez, pulsa Enter para usar `admin` o escribe otro usuario.
-Introduce la contraseña de la cuenta Tapo. La entrada es visible.
+Introduce la contraseña de la cuenta Tapo. La entrada se mantiene oculta.
 Si la cámara acepta la sesión, el programa guarda la configuración en
 `camera_control/.env`, excluido de Git, y la reutiliza al volver a iniciar.
 Para cambiarla, retira las dos entradas de PyTapo del archivo y vuelve a

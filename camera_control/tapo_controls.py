@@ -72,8 +72,10 @@ def run_tapo_menu(camera, choose_action) -> None:
             actions[selected]()
         except CameraControlError as error:
             print(error)
-        except Exception:
+        except Exception as error:
             # PyTapo raises plain Exception for rejected camera operations.
+            if type(error) is not Exception and not isinstance(error, OSError):
+                raise
             print("PyTapo no pudo completar esa orden.")
         else:
             if selected < len(MOVES):

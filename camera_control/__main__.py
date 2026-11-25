@@ -1,9 +1,10 @@
 """Consola local para comprobar el encuadre de la Tapo."""
 
-from collections.abc import Callable
 import sys
+from collections.abc import Callable
 
 from capture.rtsp.config import RtspConfig, RtspConfigurationError
+
 from .tapo_controls import run_tapo_menu
 from .tapo_login import connect_tapo
 
