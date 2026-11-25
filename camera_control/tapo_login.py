@@ -18,10 +18,10 @@ def _read_credentials() -> tuple[str, str]:
 
 
 def _save_credentials(username: str, password: str) -> None:
-    ENV_FILE.write_text(
-        f"TAPO_CONTROL_USERNAME={username}\nTAPO_CLOUD_PASSWORD={password}\n",
-        encoding="utf-8",
-    )
+    with ENV_FILE.open("w", encoding="utf-8") as credentials_file:
+        credentials_file.write(
+            f"TAPO_CONTROL_USERNAME={username}\nTAPO_CLOUD_PASSWORD={password}\n"
+        )
 
 
 def connect_tapo(host: str):
