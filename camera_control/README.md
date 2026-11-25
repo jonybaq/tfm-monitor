@@ -22,6 +22,11 @@ Usa las flechas y Enter para elegir un control. Guarda un encuadre, mueve
 la cámara y comprueba que vuelve al mismo sitio al recuperar el encuadre.
 Si pruebas el modo día/noche, vuelve al modo inicial al terminar.
 
+**Consultar o controlar micrófono** muestra su estado y volumen de captación.
+Para probarlo, abre el directo por RTSP, silencia el micrófono desde el
+menú y comprueba que deja de oírse el audio de origen. Reactívalo y comprueba
+que vuelve el sonido. Silenciar el micrófono afecta al análisis de llanto.
+
 Pruebas unitarias sin cámara ni red:
 
 ```powershell

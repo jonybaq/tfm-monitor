@@ -59,14 +59,40 @@ def night_mode(camera, choose_action) -> None:
         print(f"Modo confirmado: {choices[selected]}.")
 
 
+def microphone_settings(camera) -> dict:
+    microphone = camera.getAudioConfig().get("audio_config", {}).get("microphone", {})
+    if microphone.get("mute") not in {"on", "off"}:
+        raise CameraControlError("La cámara no informa el estado de silencio del micrófono.")
+    return microphone
+
+
+def microphone_menu(camera, choose_action) -> None:
+    current = microphone_settings(camera)
+    muted = current["mute"] == "on"
+    print(f"Micrófono de la cámara: {'silenciado' if muted else 'activo'}.")
+    if "volume" in current:
+        print(f"Volumen de captación: {current['volume']}.")
+    action = "Reactivar micrófono" if muted else "Silenciar micrófono"
+    print("Silenciar la cámara afecta al audio de origen y al análisis de llanto.")
+    if choose_action(("Volver", action)) == 0:
+        return
+
+    camera.setMicrophone(mute=not muted)
+    expected = "off" if muted else "on"
+    if microphone_settings(camera)["mute"] != expected:
+        raise CameraControlError("La cámara todavía no confirma el cambio del micrófono.")
+    print(f"Micrófono confirmado: {'activo' if muted else 'silenciado'}.")
+
+
 def run_tapo_menu(camera, choose_action) -> None:
     labels = tuple(f"Mover {direction}" for direction in MOVES) + (
         "Guardar encuadre de prueba", "Volver al encuadre de prueba",
-        "Consultar o cambiar modo día/noche", "Salir",
+        "Consultar o cambiar modo día/noche", "Consultar o controlar micrófono", "Salir",
     )
     actions = [partial(camera.moveMotor, x, y) for x, y in MOVES.values()]
     actions.extend((partial(save_view, camera), partial(restore_view, camera),
-                    partial(night_mode, camera, choose_action)))
+                    partial(night_mode, camera, choose_action),
+                    partial(microphone_menu, camera, choose_action)))
     while (selected := choose_action(labels)) < len(actions):
         try:
             actions[selected]()

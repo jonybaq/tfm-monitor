@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from camera_control.tapo_controls import PRESET_NAME, run_tapo_menu
+from camera_control.tapo_controls import PRESET_NAME, microphone_menu, run_tapo_menu
 from camera_control.tapo_login import connect_tapo
 
 
@@ -19,7 +19,7 @@ class TapoLoginTests(unittest.TestCase):
         updated = {**previous, "7": f"{PRESET_NAME} 1"}
         camera.getPresets.side_effect = [previous, updated, updated]
         camera.getDayNightMode.side_effect = ["auto", "on"]
-        choose_action = Mock(side_effect=[0, 1, 2, 3, 4, 5, 6, 1, 7])
+        choose_action = Mock(side_effect=[0, 1, 2, 3, 4, 5, 6, 1, 8])
         with contextlib.redirect_stdout(io.StringIO()) as output:
             run_tapo_menu(camera, choose_action)
         self.assertEqual(
@@ -31,6 +31,32 @@ class TapoLoginTests(unittest.TestCase):
         camera.setPreset.assert_called_once_with("7")
         camera.setDayNightMode.assert_called_once_with("on")
         self.assertIn("Modo confirmado: Noche", output.getvalue())
+
+    def test_microphone_can_be_silenced_and_reactivated(self):
+        camera = Mock()
+        camera.getAudioConfig.side_effect = [
+            {"audio_config": {"microphone": {"mute": status, "volume": 75}}}
+            for status in ("off", "on", "on", "off")
+        ]
+        choose = Mock(return_value=1)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            microphone_menu(camera, choose)
+            microphone_menu(camera, choose)
+        self.assertEqual(
+            [call.kwargs for call in camera.setMicrophone.call_args_list],
+            [{"mute": True}, {"mute": False}],
+        )
+        self.assertIn("Micrófono confirmado: silenciado", output.getvalue())
+        self.assertIn("Micrófono confirmado: activo", output.getvalue())
+
+    def test_microphone_menu_defaults_to_return_without_changes(self):
+        camera = Mock()
+        camera.getAudioConfig.return_value = {"audio_config": {"microphone": {"mute": "off"}}}
+        choose = Mock(return_value=0)
+        with contextlib.redirect_stdout(io.StringIO()):
+            microphone_menu(camera, choose)
+        choose.assert_called_once_with(("Volver", "Silenciar micrófono"))
+        camera.setMicrophone.assert_not_called()
 
     def test_saves_only_after_login_and_reuses_credentials(self):
         tapo = Mock(side_effect=[Exception(), object(), object()])
