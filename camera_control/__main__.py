@@ -4,7 +4,7 @@ from functools import partial
 import sys
 
 from capture.rtsp.config import RtspConfig, RtspConfigurationError
-from .ptz import CameraController, CameraControlError, DIRECTIONS
+from .ptz import CameraController, CameraControlError, DIRECTIONS, ONVIF_PORT
 
 
 def choose_action(labels: tuple[str, ...]) -> int:
@@ -50,23 +50,50 @@ def main() -> int:
     if sys.platform != "win32" or not sys.stdin.isatty():
         print("Ejecuta el control de cámara desde una terminal interactiva de Windows.")
         return 1
+    print("1. Comprobando la instalación de ONVIF...", flush=True)
     try:
         from onvif.exceptions import ONVIFError
     except ImportError:
+        print("[ERROR] La dependencia ONVIF no está disponible.")
         print(r"Instala las dependencias con .\.venv\Scripts\python.exe -m pip install -r camera_control/requirements.txt")
         return 1
+    print("[OK] Dependencia ONVIF disponible.")
     try:
-        controller = CameraController.connect(RtspConfig.from_environment())
+        controller = initialize_camera(ONVIFError)
+        if controller is None:
+            return 1
         run_menu(controller, ONVIFError)
     except KeyboardInterrupt:
         return 0
-    except (CameraControlError, RtspConfigurationError) as error:
-        print(error)
-        return 1
-    except (ONVIFError, OSError):
-        print("No se pudo conectar por ONVIF. Revisa la cuenta de cámara y la red local.")
-        return 1
     return 0
+
+
+def initialize_camera(protocol_error: type[Exception]) -> CameraController | None:
+    print("2. Verificando la configuración de la cámara...", flush=True)
+    try:
+        config = RtspConfig.from_environment()
+    except RtspConfigurationError as error:
+        print(f"[ERROR] {error} Revisa capture/.env.")
+        return None
+    except OSError:
+        print("[ERROR] No se pudo leer capture/.env.")
+        return None
+    print("[OK] Configuración de cámara válida.")
+
+    host = config.host
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    print(f"3. Conectando por ONVIF a {host}:{ONVIF_PORT}...", flush=True)
+    try:
+        controller = CameraController.connect(config)
+    except CameraControlError as error:
+        print(f"[ERROR] {error}")
+        return None
+    except (protocol_error, OSError):
+        print("[ERROR] No se pudo conectar por ONVIF. Revisa la cuenta de cámara y la red local.")
+        return None
+    print("[OK] Conexión ONVIF y perfil de movimiento disponibles.")
+    return controller
 
 
 if __name__ == "__main__":

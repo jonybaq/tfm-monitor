@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from capture.rtsp.config import RtspConfig
 from camera_control.ptz import CameraController, CameraControlError, SUPERVISION_PRESET
-from camera_control.__main__ import choose_action, main, run_menu
+from camera_control.__main__ import choose_action, initialize_camera, main, run_menu
 
 
 class CameraControllerTests(unittest.TestCase):
@@ -116,10 +116,31 @@ class CameraControllerTests(unittest.TestCase):
             patch("camera_control.__main__.RtspConfig.from_environment") as config,
             patch("camera_control.__main__.CameraController.connect") as connect,
             patch("camera_control.__main__.run_menu") as menu,
+            patch("builtins.print") as tell,
         ):
+            config.return_value = RtspConfig("camera.local", "test-user", "test-value")
             self.assertEqual(main(), 0)
         connect.assert_called_once_with(config.return_value)
         menu.assert_called_once_with(connect.return_value, OSError)
+        messages = [call.args[0] for call in tell.call_args_list]
+        steps = [message for message in messages if message[:2] in {"1.", "2.", "3."}]
+        self.assertEqual([step[0] for step in steps], ["1", "2", "3"])
+        self.assertIn("camera.local:2020", steps[2])
+        self.assertNotIn("test-value", "\n".join(messages))
+
+    def test_connection_failure_keeps_address_and_omits_protocol_details(self):
+        with (
+            patch("camera_control.__main__.RtspConfig.from_environment",
+                  return_value=RtspConfig("2001:db8::1", "user", "sample")),
+            patch("camera_control.__main__.CameraController.connect",
+                  side_effect=OSError("detalle privado")),
+            patch("builtins.print") as tell,
+        ):
+            self.assertIsNone(initialize_camera(OSError))
+        messages = "\n".join(call.args[0] for call in tell.call_args_list)
+        self.assertIn("[2001:db8::1]:2020", messages)
+        self.assertIn("[ERROR] No se pudo conectar", messages)
+        self.assertNotIn("detalle privado", messages)
 
     def test_menu_leaves_protocol_details_out_of_console(self):
         controller = Mock()

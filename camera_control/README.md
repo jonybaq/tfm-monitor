@@ -11,6 +11,10 @@ Desde la raíz del repositorio:
 .\.venv\Scripts\python.exe -m camera_control
 ```
 
+Al arrancar, la consola muestra la comprobación de ONVIF, la validación de
+`capture/.env` y la dirección de la cámara. El menú aparece cuando la
+conexión ONVIF y el perfil de movimiento están disponibles.
+
 En el encuadre de la cuna, selecciona **Guardar encuadre de supervisión**.
 Prueba los cuatro movimientos y selecciona **Volver al encuadre de
 supervisión**. Verifica que la cámara recupera la posición y que el directo
