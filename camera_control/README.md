@@ -32,3 +32,30 @@ Pruebas unitarias sin cámara ni red:
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s camera_control/tests
 ```
+
+## Cliente WebSocket de prueba
+
+La opción **Conectar al servidor WebSocket** abre una conexión saliente al
+servidor configurado en `camera_control/.env`. Usa `CAMERA_CONTROL_WS_URL`
+y `CAMERA_CONTROL_WS_TOKEN`.
+Usa `wss://` fuera de loopback. Para probar con tu cámara, sigue los pasos del
+[servidor local](../backend/README.md). Con las variables configuradas,
+ejecuta:
+
+```powershell
+.\.venv\Scripts\python.exe -m camera_control
+```
+
+El servidor puede enviar `{"id":"orden-1","action":"move_left"}` o cualquiera
+de los demás controles del menú del backend.
+El cliente devuelve el mismo ID y un estado `accepted`, `rejected` o
+`camera_error`. Si PyTapo informa que alcanzó el tope del motor, el cliente
+devuelve `movement_limit`. Las consultas devuelven además el estado solicitado.
+Si se pierde la conexión, el cliente reintenta hasta tres veces con dos
+segundos de espera entre intentos. Si sigue sin conectar, el menú permite
+seguir intentando o volver al menú principal.
+La prueba automatizada usa un servidor en loopback y una cámara simulada:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s camera_control/tests -p test_remote.py
+```

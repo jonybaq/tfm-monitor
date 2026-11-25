@@ -7,20 +7,20 @@ from warnings import catch_warnings, simplefilter
 ENV_FILE = Path(__file__).with_name(".env")
 
 
-def _read_credentials() -> tuple[str, str]:
+def read_settings() -> dict[str, str]:
     settings = {}
     if ENV_FILE.is_file():
         for line in ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
             key, separator, value = line.partition("=")
             if separator:
                 settings[key] = value
-    return settings.get("TAPO_CONTROL_USERNAME", ""), settings.get("TAPO_CLOUD_PASSWORD", "")
+    return settings
 
 
 def _save_credentials(username: str, password: str) -> None:
-    with ENV_FILE.open("w", encoding="utf-8") as credentials_file:
+    with ENV_FILE.open("a", encoding="utf-8") as credentials_file:
         credentials_file.write(
-            f"TAPO_CONTROL_USERNAME={username}\nTAPO_CLOUD_PASSWORD={password}\n"
+            f"\nTAPO_CONTROL_USERNAME={username}\nTAPO_CLOUD_PASSWORD={password}\n"
         )
 
 
@@ -31,7 +31,9 @@ def connect_tapo(host: str):
         print(r"Instala PyTapo con .\.venv\Scripts\python.exe -m pip install -r camera_control/requirements.txt")
         return None
 
-    username, password = _read_credentials()
+    settings = read_settings()
+    username = settings.get("TAPO_CONTROL_USERNAME", "")
+    password = settings.get("TAPO_CLOUD_PASSWORD", "")
     needs_setup = not (username and password)
     if needs_setup:
         username = input("Nombre de usuario [admin]: ").strip() or "admin"

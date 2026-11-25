@@ -1097,3 +1097,7 @@ urllib3==2.8.0 \
     # via
     #   -r requirements-ci.in
     #   requests
+websockets==17.4 \
+    --hash=sha256:ef03fb4b3685df0ed9dc6a074a090f030345cad2c23c61818da3e08e693a9caa \
+    --hash=sha256:c6bd2c9781915592b209160d0f017d4c7c82ad53075e6b0c24d2a89299e7f9e9
+    # via -r requirements-ci.in

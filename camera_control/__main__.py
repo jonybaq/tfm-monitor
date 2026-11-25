@@ -44,10 +44,16 @@ def main() -> int:
         print("Ejecuta el control de cámara desde una terminal interactiva de Windows.")
         return 1
     try:
-        camera = connect_tapo(RtspConfig.from_environment().host)
-        if camera is None:
-            return 1
-        run_tapo_menu(camera, choose_action)
+        while (mode := choose_action(("Control local", "Conectar al servidor WebSocket", "Salir"))) != 2:
+            camera = connect_tapo(RtspConfig.from_environment().host)
+            if camera is None:
+                return 1
+            if mode == 0:
+                run_tapo_menu(camera, choose_action)
+                return 0
+            from .remote import run_remote_from_config
+
+            run_remote_from_config(camera, choose_action)
     except RtspConfigurationError as error:
         print(f"[ERROR] {error} Revisa capture/.env.")
         return 1

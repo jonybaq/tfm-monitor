@@ -37,7 +37,8 @@ class CameraControlCliTests(unittest.TestCase):
                   return_value=SimpleNamespace(host="camera.local")),
             patch("camera_control.__main__.connect_tapo") as connect,
             patch("camera_control.__main__.run_tapo_menu") as run_menu,
+            patch("camera_control.__main__.choose_action", return_value=0) as choose,
         ):
             self.assertEqual(main(), 0)
         connect.assert_called_once_with("camera.local")
-        run_menu.assert_called_once_with(connect.return_value, choose_action)
+        run_menu.assert_called_once_with(connect.return_value, choose)

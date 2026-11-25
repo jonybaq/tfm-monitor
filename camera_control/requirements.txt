@@ -1,1 +1,2 @@
 pytapo==3.4.26
+websockets==17.4

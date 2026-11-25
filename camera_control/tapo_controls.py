@@ -1,5 +1,6 @@
 """Controls for testing the camera directly through PyTapo."""
 
+import re
 from functools import partial
 
 PRESET_NAME = "TFM PyTapo"
@@ -13,6 +14,26 @@ MODES = {"Día": "off", "Noche": "on", "Automático": "auto"}
 
 class CameraControlError(Exception):
     """A control operation could not be confirmed."""
+
+
+class MovementLimitError(CameraControlError):
+    """The camera reported its pan or tilt limit."""
+
+
+def move_camera(camera, direction: str) -> None:
+    destination = f"la {direction}" if direction in {"izquierda", "derecha"} else direction
+    message = f"La cámara ya no puede moverse más hacia {destination}."
+    try:
+        response = camera.moveMotor(*MOVES[direction])
+    except Exception as error:
+        details = str(error)
+        if "MOTOR_LOCKED_ROTOR" not in details and not re.search(
+            r'"error_code"\s*:\s*(?:-64304\b|"-64304")', details,
+        ):
+            raise
+        raise MovementLimitError(message) from None
+    if isinstance(response, dict) and response.get("error_code") in (-64304, "-64304"):
+        raise MovementLimitError(message)
 
 
 def find_view(camera):
@@ -53,10 +74,14 @@ def night_mode(camera, choose_action) -> None:
     choices = tuple(MODES) + ("Volver",)
     selected = choose_action(choices)
     if selected < len(MODES):
-        camera.setDayNightMode(MODES[choices[selected]])
-        if camera.getDayNightMode() != MODES[choices[selected]]:
-            raise CameraControlError("La cámara todavía no confirma el modo solicitado.")
+        set_day_night_mode(camera, MODES[choices[selected]])
         print(f"Modo confirmado: {choices[selected]}.")
+
+
+def set_day_night_mode(camera, mode: str) -> None:
+    camera.setDayNightMode(mode)
+    if camera.getDayNightMode() != mode:
+        raise CameraControlError("La cámara todavía no confirma el modo solicitado.")
 
 
 def microphone_settings(camera) -> dict:
@@ -77,11 +102,15 @@ def microphone_menu(camera, choose_action) -> None:
     if choose_action(("Volver", action)) == 0:
         return
 
-    camera.setMicrophone(mute=not muted)
-    expected = "off" if muted else "on"
+    set_microphone_mute(camera, not muted)
+    print(f"Micrófono confirmado: {'activo' if muted else 'silenciado'}.")
+
+
+def set_microphone_mute(camera, muted: bool) -> None:
+    camera.setMicrophone(mute=muted)
+    expected = "on" if muted else "off"
     if microphone_settings(camera)["mute"] != expected:
         raise CameraControlError("La cámara todavía no confirma el cambio del micrófono.")
-    print(f"Micrófono confirmado: {'activo' if muted else 'silenciado'}.")
 
 
 def run_tapo_menu(camera, choose_action) -> None:
@@ -89,7 +118,7 @@ def run_tapo_menu(camera, choose_action) -> None:
         "Guardar encuadre de prueba", "Volver al encuadre de prueba",
         "Consultar o cambiar modo día/noche", "Consultar o controlar micrófono", "Salir",
     )
-    actions = [partial(camera.moveMotor, x, y) for x, y in MOVES.values()]
+    actions = [partial(move_camera, camera, direction) for direction in MOVES]
     actions.extend((partial(save_view, camera), partial(restore_view, camera),
                     partial(night_mode, camera, choose_action),
                     partial(microphone_menu, camera, choose_action)))

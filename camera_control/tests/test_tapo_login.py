@@ -68,7 +68,10 @@ class TapoLoginTests(unittest.TestCase):
             env_file = config_directory / ".env"
             other_file = Path(directory) / "another.env"
             with patch("camera_control.tapo_login.ENV_FILE", env_file):
-                env_file.write_text("TAPO_CONTROL_USERNAME=admin\nENV_FILE=another.env\n")
+                env_file.write_text(
+                    "TAPO_CONTROL_USERNAME=admin\nENV_FILE=another.env\n"
+                    "CAMERA_CONTROL_WS_URL=ws://127.0.0.1:8765/camera\n"
+                )
                 with (
                     patch("builtins.input", return_value=""),
                     patch("camera_control.tapo_login.getpass", return_value="../another.env"),
@@ -78,6 +81,7 @@ class TapoLoginTests(unittest.TestCase):
                     self.assertIsNotNone(connect_tapo("camera.local"))
                 self.assertFalse(other_file.exists())
                 self.assertIn("TAPO_CLOUD_PASSWORD=../another.env", env_file.read_text())
+                self.assertIn("CAMERA_CONTROL_WS_URL=ws://127.0.0.1:8765/camera", env_file.read_text())
                 with (
                     patch("builtins.input", side_effect=AssertionError),
                     patch("camera_control.tapo_login.getpass", side_effect=AssertionError),
