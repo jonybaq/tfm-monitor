@@ -43,6 +43,18 @@ jobs:
           PYTHONPATH="${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}/capture" python -m coverage run --append -m unittest discover -s streaming/tests -v
           python -m coverage run --append -m unittest discover -s camera_control/tests -v
           python -m coverage xml
+          python - <<'PY'
+          from xml.etree import ElementTree
+
+          paths = [
+              item.attrib["filename"]
+              for item in ElementTree.parse("coverage.xml").iter("class")
+          ]
+          expected = {"camera_control/__main__.py", "streaming/__main__.py"}
+          invalid = sorted(path for path in expected if paths.count(path) != 1)
+          if invalid:
+              raise SystemExit(f"Invalid coverage paths: {', '.join(invalid)}")
+          PY
           python -m coverage report
 
       - name: Analyze with SonarQube Cloud
