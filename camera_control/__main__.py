@@ -1,5 +1,6 @@
 """Consola local para comprobar el encuadre de la Tapo."""
 
+from collections.abc import Callable
 from functools import partial
 import sys
 
@@ -15,18 +16,26 @@ def choose_action(labels: tuple[str, ...]) -> int:
     while True:
         for index, label in enumerate(labels):
             print(f"{'>' if index == selected else ' '} {label}")
-        while True:
-            key = getwch()
-            if key in {"\x03", "\x1b"}:
-                raise KeyboardInterrupt
-            if key == "\r":
-                return selected
-            if key in {"\x00", "\xe0"}:
-                arrow = getwch()
-                if arrow in {"H", "P"}:
-                    selected = (selected + (-1 if arrow == "H" else 1)) % len(labels)
-                    print(f"\033[{len(labels)}A", end="", flush=True)
-                    break
+        step = read_menu_step(getwch)
+        if step == 0:
+            return selected
+        selected = (selected + step) % len(labels)
+        print(f"\033[{len(labels)}A", end="", flush=True)
+
+
+def read_menu_step(read_key: Callable[[], str]) -> int:
+    """Convert Windows keyboard input into a selection step or Enter."""
+    arrow_steps = {"H": -1, "P": 1}
+    while True:
+        key = read_key()
+        if key in {"\x03", "\x1b"}:
+            raise KeyboardInterrupt
+        if key == "\r":
+            return 0
+        if key in {"\x00", "\xe0"}:
+            step = arrow_steps.get(read_key())
+            if step is not None:
+                return step
 
 
 def run_menu(controller: CameraController, protocol_error: type[Exception]) -> None:

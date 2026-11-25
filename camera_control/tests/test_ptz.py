@@ -108,6 +108,24 @@ class CameraControllerTests(unittest.TestCase):
         with patch.dict("sys.modules", {"msvcrt": keyboard}), patch("builtins.print"):
             self.assertEqual(choose_action(("Arriba", "Salir")), 1)
 
+    def test_keyboard_down_skips_unrelated_extended_keys(self):
+        keyboard = SimpleNamespace(getwch=Mock(
+            side_effect=["\xe0", "K", "\x00", "P", "\r"],
+        ))
+        with patch.dict("sys.modules", {"msvcrt": keyboard}), patch("builtins.print"):
+            self.assertEqual(choose_action(("Arriba", "Abajo", "Salir")), 1)
+
+    def test_escape_and_control_c_cancel_keyboard_selection(self):
+        for key in ("\x1b", "\x03"):
+            keyboard = SimpleNamespace(getwch=Mock(return_value=key))
+            with (
+                self.subTest(key=key),
+                patch.dict("sys.modules", {"msvcrt": keyboard}),
+                patch("builtins.print"),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                choose_action(("Arriba", "Salir"))
+
     def test_main_runs_in_its_own_terminal(self):
         with (
             patch("camera_control.__main__.sys.platform", "win32"),
