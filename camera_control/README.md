@@ -1,8 +1,8 @@
 # Control local de la cámara Tapo
 
-La HU-12 añade control de giro, inclinación y encuadre desde Windows.
-El módulo se ejecuta por separado y usa la cuenta local de cámara que ya
-está configurada en `capture/.env`. ONVIF usa el puerto 2020 en la red local.
+El módulo usa PyTapo por el puerto 443 para mover la cámara, guardar y
+recuperar el encuadre de supervisión y cambiar el modo Día, Noche o Automático.
+Usa la dirección de la cámara configurada en `capture/.env`.
 
 Desde la raíz del repositorio:
 
@@ -11,21 +11,16 @@ Desde la raíz del repositorio:
 .\.venv\Scripts\python.exe -m camera_control
 ```
 
-Al arrancar, la consola muestra la comprobación de ONVIF, la validación de
-`capture/.env` y la dirección de la cámara. El menú aparece cuando la
-conexión ONVIF y el perfil de movimiento están disponibles.
+La primera vez, pulsa Enter para usar `admin` o escribe otro usuario.
+Introduce la contraseña de la cuenta Tapo. La entrada es visible.
+Si la cámara acepta la sesión, el programa guarda la configuración en
+`camera_control/.env`, excluido de Git, y la reutiliza al volver a iniciar.
+Para cambiarla, retira las dos entradas de PyTapo del archivo y vuelve a
+ejecutar el programa.
 
-En el encuadre de la cuna, selecciona **Guardar encuadre de supervisión**.
-Prueba los cuatro movimientos y selecciona **Volver al encuadre de
-supervisión**. Verifica que la cámara recupera la posición y que el directo
-continúa en la otra terminal. El encuadre se guarda en la cámara si el
-firmware admite posiciones ONVIF.
-
-**Consultar o cambiar modo nocturno** muestra el filtro infrarrojo actual
-y solo ofrece los modos anunciados por el firmware mediante ONVIF.
-Si la cámara no expone esa capacidad, el ajuste sigue disponible en la app
-Tapo. Prueba el cambio con el directo abierto y restaura el modo anterior
-al terminar.
+Usa las flechas y Enter para elegir un control. Guarda un encuadre, mueve
+la cámara y comprueba que vuelve al mismo sitio al recuperar el encuadre.
+Si pruebas el modo día/noche, vuelve al modo inicial al terminar.
 
 Pruebas unitarias sin cámara ni red:
 

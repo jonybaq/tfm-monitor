@@ -1,1 +1,1 @@
-onvif-zeep==0.2.12
+pytapo==3.4.26
