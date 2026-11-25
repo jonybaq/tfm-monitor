@@ -4,6 +4,7 @@ from datetime import timedelta
 import time
 
 from capture.rtsp.config import RtspConfig
+from .imaging import NightMode
 
 ONVIF_PORT = 2020
 SUPERVISION_PRESET = "TFM - Encuadre de supervision"
@@ -22,9 +23,10 @@ class CameraControlError(RuntimeError):
 
 
 class CameraController:
-    def __init__(self, ptz, profile_token: str):
+    def __init__(self, ptz, profile_token: str, *, night_mode_factory=None):
         self._ptz = ptz
         self._profile_token = profile_token
+        self._night_mode_factory = night_mode_factory
 
     @classmethod
     def connect(cls, config: RtspConfig, port: int = ONVIF_PORT):
@@ -46,7 +48,16 @@ class CameraController:
         )
         if profile is None:
             raise CameraControlError("La cámara no devolvió un perfil con control PTZ.")
-        return cls(camera.create_ptz_service(), profile.token)
+        source = getattr(profile, "VideoSourceConfiguration", None)
+        night_mode = (
+            lambda: NightMode.from_camera(camera, source.SourceToken)
+        ) if source is not None else None
+        return cls(camera.create_ptz_service(), profile.token, night_mode_factory=night_mode)
+
+    def night_mode(self) -> NightMode:
+        if self._night_mode_factory is None:
+            raise CameraControlError("El perfil no ofrece una fuente de vídeo para consultar el modo nocturno.")
+        return self._night_mode_factory()
 
     def move(self, direction: str) -> None:
         x, y = DIRECTIONS[direction]

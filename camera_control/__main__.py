@@ -5,6 +5,7 @@ from functools import partial
 import sys
 
 from capture.rtsp.config import RtspConfig, RtspConfigurationError
+from .imaging import MODE_LABELS
 from .ptz import CameraController, CameraControlError, DIRECTIONS, ONVIF_PORT
 
 
@@ -41,9 +42,13 @@ def read_menu_step(read_key: Callable[[], str]) -> int:
 def run_menu(controller: CameraController, protocol_error: type[Exception]) -> None:
     actions = [partial(controller.move, direction) for direction in DIRECTIONS]
     labels = tuple(f"Mover {direction}" for direction in DIRECTIONS) + (
-        "Guardar encuadre de supervisión", "Volver al encuadre de supervisión", "Salir",
+        "Guardar encuadre de supervisión", "Volver al encuadre de supervisión",
+        "Consultar o cambiar modo nocturno", "Salir",
     )
-    actions.extend((controller.save_view, controller.restore_view))
+    actions.extend((
+        controller.save_view, controller.restore_view,
+        partial(configure_night_mode, controller, protocol_error),
+    ))
     while (selected := choose_action(labels)) < len(actions):
         try:
             actions[selected]()
@@ -52,7 +57,33 @@ def run_menu(controller: CameraController, protocol_error: type[Exception]) -> N
         except (protocol_error, OSError):
             print("La cámara no aceptó la orden ONVIF. Revisa la conexión y la compatibilidad.")
         else:
-            print("Orden aceptada por la cámara.")
+            if selected < len(actions) - 1:
+                print("Orden aceptada por la cámara.")
+
+
+def configure_night_mode(
+    controller: CameraController, protocol_error: type[Exception],
+) -> None:
+    try:
+        night_mode = controller.night_mode()
+        current, options = night_mode.settings()
+    except (CameraControlError, protocol_error, OSError):
+        print("No se pudo consultar el modo nocturno por ONVIF. Verifica el firmware y la conexión.")
+        return
+    print(f"Modo actual: {MODE_LABELS.get(current, 'No informado')}.")
+    if not options:
+        print("La cámara no ofrece modos de filtro infrarrojo configurables por ONVIF.")
+        return
+    choices = tuple(MODE_LABELS[mode] for mode in options) + ("Volver",)
+    selected = choose_action(choices)
+    if selected == len(options):
+        return
+    try:
+        night_mode.set_mode(options[selected])
+    except (protocol_error, OSError):
+        print("La cámara no aceptó el cambio de modo nocturno por ONVIF.")
+        return
+    print(f"Modo solicitado: {choices[selected]}. Comprueba el cambio en el directo.")
 
 
 def main() -> int:

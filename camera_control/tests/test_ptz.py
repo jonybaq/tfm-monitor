@@ -68,7 +68,7 @@ class CameraControllerTests(unittest.TestCase):
 
     def test_menu_executes_only_selected_actions(self):
         controller = Mock()
-        with patch("camera_control.__main__.choose_action", side_effect=[1, 4, 5, 6]):
+        with patch("camera_control.__main__.choose_action", side_effect=[1, 4, 5, 7]):
             with patch("builtins.print"):
                 run_menu(controller, OSError)
         controller.move.assert_called_once_with("derecha")
@@ -163,7 +163,7 @@ class CameraControllerTests(unittest.TestCase):
     def test_menu_leaves_protocol_details_out_of_console(self):
         controller = Mock()
         controller.move.side_effect = OSError("detalle privado")
-        with patch("camera_control.__main__.choose_action", side_effect=[0, 6]):
+        with patch("camera_control.__main__.choose_action", side_effect=[0, 7]):
             with patch("builtins.print") as tell:
                 run_menu(controller, OSError)
         text = tell.call_args.args[0]

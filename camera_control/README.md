@@ -21,6 +21,12 @@ supervisión**. Verifica que la cámara recupera la posición y que el directo
 continúa en la otra terminal. El encuadre se guarda en la cámara si el
 firmware admite posiciones ONVIF.
 
+**Consultar o cambiar modo nocturno** muestra el filtro infrarrojo actual
+y solo ofrece los modos anunciados por el firmware mediante ONVIF.
+Si la cámara no expone esa capacidad, el ajuste sigue disponible en la app
+Tapo. Prueba el cambio con el directo abierto y restaura el modo anterior
+al terminar.
+
 Pruebas unitarias sin cámara ni red:
 
 ```powershell
