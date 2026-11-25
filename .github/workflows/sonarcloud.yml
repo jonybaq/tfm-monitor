@@ -41,6 +41,7 @@ jobs:
           PYTHONPATH="${GITHUB_WORKSPACE}/ai/vision:${GITHUB_WORKSPACE}/capture:${GITHUB_WORKSPACE}/ai/temporal" python -m coverage run --append -m unittest discover -s ai/vision/tests -v
           PYTHONPATH="${GITHUB_WORKSPACE}/ai/temporal" python -m coverage run --append -m unittest discover -s ai/temporal/tests -v
           PYTHONPATH="${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE}/capture" python -m coverage run --append -m unittest discover -s streaming/tests -v
+          python -m coverage run --append -m unittest discover -s camera_control/tests -v
           python -m coverage xml
           python -m coverage report
 

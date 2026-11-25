@@ -4,6 +4,7 @@ relative_files = True
 source =
     ai
     capture
+    camera_control
     streaming
 
 [report]
