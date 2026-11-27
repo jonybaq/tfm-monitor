@@ -1,4 +1,4 @@
-name: Snyk Code
+name: Snyk Security
 
 on:
   push:
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   analyze:
+    name: Snyk Code
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
@@ -36,6 +37,94 @@ jobs:
             echo '::error::Snyk did not return a report URL.'
             exit 1
           fi
+
+  dependencies:
+    name: Snyk Open Source (${{ matrix.project }})
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: camera-control
+            manifest: camera_control/requirements.txt
+          - project: backend
+            manifest: backend/requirements.txt
+          - project: tfm-ci
+            manifest: requirements-ci.lock
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce
+      - name: Install the dependencies to resolve
+        env:
+          MANIFEST: ${{ matrix.manifest }}
+          PROJECT: ${{ matrix.project }}
+        run: |
+          if [ "$PROJECT" = tfm-ci ]; then
+            python -m pip install --require-hashes --only-binary=:all: \
+              --extra-index-url https://download.pytorch.org/whl/cpu -r "$MANIFEST"
+          else
+            python -m pip install -r "$MANIFEST"
+          fi
+      - name: Publish and test Python dependencies
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          MANIFEST: ${{ matrix.manifest }}
+          PROJECT: ${{ matrix.project }}
+        run: |
+          args=(--file="$MANIFEST" --package-manager=pip --command=python)
+          log="$RUNNER_TEMP/snyk-dependencies.log"
+          if ! snyk monitor "${args[@]}" --project-name="tfm-$PROJECT-dependencies" --target-reference=main >"$log" 2>&1; then
+            grep -oE 'SNYK-[A-Z]+-[0-9]{4,}' "$log" | sort -u || true
+            echo "::error::Snyk no pudo publicar el informe de $MANIFEST."
+            exit 1
+          fi
+          report_url=$(grep -oE 'https://app\.snyk\.io/org/[A-Za-z0-9_-]+/project/[0-9a-fA-F-]{36}' "$log" | tail -n 1)
+          test -n "$report_url"
+          printf '[Ver dependencias de %s en Snyk](%s)\n' "$MANIFEST" "$report_url" >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          snyk test "${args[@]}" >"$log" 2>&1 || status=$?
+          case "$status" in
+            0) echo 'Snyk Open Source terminó sin hallazgos.' ;;
+            1) echo "::error::Snyk encontró vulnerabilidades en $MANIFEST. Revisa el informe en Summary." ;;
+            *) echo "::error::Snyk Open Source no pudo completar el análisis de $MANIFEST (código $status)." ;;
+          esac
+          exit "$status"
+
+  container:
+    name: Snyk Container (backend)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce
+      - name: Build the backend image
+        run: docker build --tag tfm-camera-backend:ci backend
+      - name: Publish and test the backend image
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          image=tfm-camera-backend:ci
+          log="$RUNNER_TEMP/snyk-container.log"
+          if ! snyk container monitor "$image" --file=backend/Dockerfile --project-name=tfm-backend-image --target-reference=main >"$log" 2>&1; then
+            grep -oE 'SNYK-[A-Z]+-[0-9]{4,}' "$log" | sort -u || true
+            echo '::error::Snyk no pudo publicar el informe de la imagen.'
+            exit 1
+          fi
+          report_url=$(grep -oE 'https://app\.snyk\.io/org/[A-Za-z0-9_-]+/project/[0-9a-fA-F-]{36}' "$log" | tail -n 1)
+          test -n "$report_url"
+          printf '[Ver imagen del backend en Snyk](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
+          status=0
+          snyk container test "$image" --file=backend/Dockerfile >"$log" 2>&1 || status=$?
+          case "$status" in
+            0) echo 'Snyk Container terminó sin hallazgos.' ;;
+            1) echo '::error::Snyk encontró vulnerabilidades en la imagen del backend. Revisa el informe en Summary.' ;;
+            *) echo "::error::Snyk Container no pudo completar el análisis (código $status)." ;;
+          esac
+          exit "$status"
           printf '[Ver informe de Snyk Code](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -eq 1 ]; then
             echo '::error::Snyk Code encontró vulnerabilidades. Revisa el informe enlazado en Summary.'
