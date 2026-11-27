@@ -20,7 +20,7 @@ jobs:
         run: |
           : "${SNYK_TOKEN:?Configure the SNYK_TOKEN repository secret}"
           status=0
-          snyk code test >"$RUNNER_TEMP/snyk-code.log" 2>&1 || status=$?
+          snyk code test --report --project-name=tfm-monitor-ci --target-reference=main >"$RUNNER_TEMP/snyk-code.log" 2>&1 || status=$?
           case "$status" in
             0) echo 'Snyk Code completed with no findings.' ;;
             1) echo 'Snyk Code completed with findings.' ;;
@@ -30,3 +30,9 @@ jobs:
               exit "$status"
               ;;
           esac
+          report_url=$(grep -oE 'https://app\.snyk\.io/org/[A-Za-z0-9_-]+/project/[0-9a-fA-F-]{36}' "$RUNNER_TEMP/snyk-code.log" | tail -n 1)
+          if [ -z "$report_url" ]; then
+            echo '::error::Snyk did not return a report URL.'
+            exit 1
+          fi
+          printf '[Open Snyk Code report](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
