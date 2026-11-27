@@ -38,6 +38,12 @@ jobs:
             exit 1
           fi
 
+          printf '[Ver informe de Snyk Code](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -eq 1 ]; then
+            echo '::error::Snyk Code encontró vulnerabilidades. Revisa el informe enlazado en Summary.'
+            exit 1
+          fi
+
   dependencies:
     name: Snyk Open Source (${{ matrix.project }})
     if: github.ref == 'refs/heads/main'
@@ -125,8 +131,3 @@ jobs:
             *) echo "::error::Snyk Container no pudo completar el análisis (código $status)." ;;
           esac
           exit "$status"
-          printf '[Ver informe de Snyk Code](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
-          if [ "$status" -eq 1 ]; then
-            echo '::error::Snyk Code encontró vulnerabilidades. Revisa el informe enlazado en Summary.'
-            exit 1
-          fi
