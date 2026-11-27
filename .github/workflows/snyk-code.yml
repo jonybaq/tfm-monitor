@@ -20,9 +20,13 @@ jobs:
         run: |
           : "${SNYK_TOKEN:?Configure the SNYK_TOKEN repository secret}"
           status=0
-          snyk code test --report --target-reference=main --remote-repo-url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" >"$RUNNER_TEMP/snyk-code.log" 2>&1 || status=$?
+          snyk code test >"$RUNNER_TEMP/snyk-code.log" 2>&1 || status=$?
           case "$status" in
             0) echo 'Snyk Code completed with no findings.' ;;
-            1) echo 'Snyk Code completed with findings. See the Snyk dashboard.' ;;
-            *) echo "::error::Snyk Code did not complete (exit $status). Check the token and Snyk organization permissions."; exit "$status" ;;
+            1) echo 'Snyk Code completed with findings.' ;;
+            *)
+              grep -oE 'SNYK-[A-Z]+-[0-9]{4,}' "$RUNNER_TEMP/snyk-code.log" | sort -u || true
+              echo "::error::Snyk Code did not complete (exit $status)."
+              exit "$status"
+              ;;
           esac
