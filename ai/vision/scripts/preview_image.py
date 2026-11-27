@@ -3,30 +3,32 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
 import time
-from urllib.request import urlopen
+from pathlib import Path
 
 import cv2
 import numpy as np
+import requests
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from detector import YoloDetector
 
-
 DEFAULT_SOURCE = "https://ultralytics.com/images/bus.jpg"
 
 
 def load_image(source: str) -> np.ndarray:
-    """Carga una imagen BGR desde una ruta local o una URL HTTPS."""
-    if source.startswith("https://"):
-        with urlopen(source, timeout=15) as response:
-            data = np.frombuffer(response.read(), dtype=np.uint8)
+    """Carga una imagen BGR local o la muestra oficial."""
+    if source == DEFAULT_SOURCE:
+        with requests.get(DEFAULT_SOURCE, timeout=15) as response:
+            response.raise_for_status()
+            data = np.frombuffer(response.content, dtype=np.uint8)
         image = cv2.imdecode(data, cv2.IMREAD_COLOR)
     else:
+        if "://" in source:
+            raise ValueError("Usa una ruta local o la imagen de ejemplo.")
         image = cv2.imread(source)
     if image is None:
         raise ValueError("No se pudo cargar la imagen indicada.")
@@ -50,7 +52,7 @@ def draw_detections(image: np.ndarray, result) -> np.ndarray:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default=DEFAULT_SOURCE)
+    parser.add_argument("--source", default=DEFAULT_SOURCE, help="Ruta a una imagen local")
     arguments = parser.parse_args()
     image = load_image(arguments.source)
     detector = YoloDetector()

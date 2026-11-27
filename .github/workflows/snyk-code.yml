@@ -53,9 +53,9 @@ jobs:
       matrix:
         include:
           - project: camera-control
-            manifest: camera_control/requirements.txt
+            manifest: camera_control/requirements-ci.lock
           - project: backend
-            manifest: backend/requirements.txt
+            manifest: backend/requirements.lock
           - project: tfm-ci
             manifest: requirements-ci.lock
     steps:
@@ -67,14 +67,9 @@ jobs:
       - name: Install the dependencies to resolve
         env:
           MANIFEST: ${{ matrix.manifest }}
-          PROJECT: ${{ matrix.project }}
-        run: |
-          if [ "$PROJECT" = tfm-ci ]; then
-            python -m pip install --require-hashes --only-binary=:all: \
-              --extra-index-url https://download.pytorch.org/whl/cpu -r "$MANIFEST"
-          else
-            python -m pip install -r "$MANIFEST"
-          fi
+        run: >-
+          python -m pip install --require-hashes --only-binary=:all:
+          --extra-index-url https://download.pytorch.org/whl/cpu -r "$MANIFEST"
       - name: Publish and test Python dependencies
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
