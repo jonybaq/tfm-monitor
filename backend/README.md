@@ -89,7 +89,7 @@ Docker instala ruedas de Python con versiones y hashes de `requirements.lock`.
 Al actualizar `requirements.txt`, regenera el lock desde la raíz:
 
 ```powershell
-uv pip compile backend/requirements.txt --generate-hashes --no-build --python-version 3.14 --python-platform x86_64-manylinux_2_28 --output-file backend/requirements.lock
+uv pip compile backend/requirements.txt --generate-hashes --no-build --python-version 3.14 --python-platform x86_64-unknown-linux-musl --output-file backend/requirements.lock
 ```
 
 Para detener el contenedor:

@@ -1,13 +1,11 @@
-FROM python:3.14-slim@sha256:22eafb370920ad8b429e0aec3fff433e0669968519f5d60469d83729c138b28b
+FROM python:3.14-alpine@sha256:5862d971d1f0ae26b258cefa4e893556b1d3aba81bd2ff30888704ad378bab67
 
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
 COPY requirements.lock ./
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libzstd1=1.5.7+dfsg-1+deb13u1 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache libcrypto3=3.5.9-r1 libssl3=3.5.9-r1 zlib=1.4-r0
 RUN python -m pip install --no-cache-dir --only-binary=:all: --require-hashes -r requirements.lock \
     && python -m pip uninstall --yes pip
 
