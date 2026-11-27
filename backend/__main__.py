@@ -18,12 +18,12 @@ RESULTS = {
 ENV_FILE = Path(__file__).with_name(".env")
 
 
-def read_token() -> str:
+def read_token(setting: str = "CAMERA_CONTROL_WS_TOKEN") -> str:
     configured_value = ""
     if ENV_FILE.is_file():
         for line in ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
             key, separator, value = line.partition("=")
-            if separator and key.strip() == "CAMERA_CONTROL_WS_TOKEN":
+            if separator and key.strip() == setting:
                 configured_value = value.strip()
     return configured_value
 
@@ -70,7 +70,8 @@ def show_result(action: str, result: dict) -> None:
 
 
 def main() -> int:
-    if sys.platform != "win32" or not sys.stdin.isatty():
+    api_mode = sys.argv[1:] == ["--api"]
+    if not api_mode and (sys.platform != "win32" or not sys.stdin.isatty()):
         print("Ejecuta la consola WebSocket desde una terminal interactiva de Windows.")
         return 1
     try:
@@ -80,7 +81,14 @@ def main() -> int:
             thread.start()
             try:
                 print("Servidor escuchando en ws://127.0.0.1:8765/camera.")
-                run_console(channel)
+                if api_mode:
+                    from .http_api import create_http_server
+
+                    with create_http_server(channel, read_token("CAMERA_CONTROL_API_TOKEN")) as api:
+                        print("API escuchando en http://127.0.0.1:8080.", flush=True)
+                        api.serve_forever()
+                else:
+                    run_console(channel)
             finally:
                 server.shutdown()
                 channel.close()
@@ -89,7 +97,7 @@ def main() -> int:
         print(error)
         return 1
     except OSError:
-        print("No se pudo iniciar el servidor local en el puerto 8765.")
+        print("No se pudo iniciar o mantener el servidor local. Revisa los puertos 8765 y 8080.")
         return 1
     except KeyboardInterrupt:
         return 0

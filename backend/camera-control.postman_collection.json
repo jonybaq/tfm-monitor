@@ -1,0 +1,119 @@
+{
+  "info": {
+    "name": "TFM - Control de cámara",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8080"
+    },
+    {
+      "key": "apiToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Consultar modo día/noche",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/camera/day-night"
+      }
+    },
+    {
+      "name": "Consultar micrófono",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/camera/microphone"
+      }
+    },
+    {
+      "name": "Mover a la izquierda",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/move_left"
+      }
+    },
+    {
+      "name": "Mover a la derecha",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/move_right"
+      }
+    },
+    {
+      "name": "Mover arriba",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/move_up"
+      }
+    },
+    {
+      "name": "Mover abajo",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/move_down"
+      }
+    },
+    {
+      "name": "Guardar encuadre",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/save_view"
+      }
+    },
+    {
+      "name": "Recuperar encuadre",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/restore_view"
+      }
+    },
+    {
+      "name": "Activar modo Día",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/set_day"
+      }
+    },
+    {
+      "name": "Activar modo Noche",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/set_night"
+      }
+    },
+    {
+      "name": "Activar modo Automático",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/set_auto"
+      }
+    },
+    {
+      "name": "Silenciar micrófono de la cámara",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/mute_microphone"
+      }
+    },
+    {
+      "name": "Reactivar micrófono de la cámara",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/camera/actions/unmute_microphone"
+      }
+    }
+  ]
+}

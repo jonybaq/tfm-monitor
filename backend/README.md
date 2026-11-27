@@ -44,3 +44,25 @@ Pruebas automatizadas con un cliente WebSocket simulado:
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s backend/tests -v
 ```
+
+## API REST local y Postman
+
+Inicia el backend en modo API. Este proceso también levanta el WebSocket:
+
+```powershell
+.\.venv\Scripts\python.exe -m backend --api
+```
+
+En otra terminal inicia `python -m camera_control` con el entorno del proyecto
+y elige **Conectar al servidor WebSocket**. Importa
+`camera-control.postman_collection.json` en Postman. Configura la variable
+local `apiToken` con el valor de `CAMERA_CONTROL_API_TOKEN` de
+`backend/.env`. Este token es distinto del token WebSocket.
+
+- `GET /api/v1/camera/day-night` y `GET /api/v1/camera/microphone` consultan el estado.
+- `POST /api/v1/camera/actions/{action}` envía una acción del menú sin cuerpo HTTP.
+- La API responde `200` si PyTapo acepta la orden, `401` si el token no es válido,
+  `409` si el motor informa el límite o hay una orden en curso, `503` si el
+  controlador está desconectado y `504` si no hay confirmación a tiempo.
+
+La API escucha en `127.0.0.1:8080` para esta primera versión local.

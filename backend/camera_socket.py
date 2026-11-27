@@ -47,10 +47,12 @@ class CameraChannel:
         return None
 
     def handle(self, connection) -> None:
+        peer_ip = connection.remote_address[0]
         with self._changed:
             occupied = self._closed or self._connection is not None
             if not occupied:
                 self._connection = connection
+                print(f"[WS] Controlador conectado desde {peer_ip} | activos: 1", flush=True)
                 self._changed.notify_all()
         if occupied:
             connection.close(code=1008, reason="Ya hay un controlador conectado.")
@@ -63,6 +65,7 @@ class CameraChannel:
         finally:
             with self._changed:
                 self._connection = None
+                print(f"[WS] Controlador desconectado de {peer_ip} | activos: 0", flush=True)
                 self._changed.notify_all()
 
     def _receive(self, connection, message: str | bytes) -> None:
