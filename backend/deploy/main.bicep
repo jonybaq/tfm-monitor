@@ -13,9 +13,6 @@ resource environment 'Microsoft.App/managedEnvironments@2025-07-01' = {
   name: 'env-tfm-backend'
   location: location
   properties: {
-    appLogsConfiguration: {
-      destination: 'none'
-    }
     workloadProfiles: [
       {
         name: 'Consumption'
