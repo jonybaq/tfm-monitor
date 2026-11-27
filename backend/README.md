@@ -85,6 +85,13 @@ publica REST en `http://127.0.0.1:8080` y WebSocket en
 `ws://127.0.0.1:8080/camera`. Usa la misma colección de Postman y ejecuta
 `camera_control` en la laptop como antes.
 
+Docker instala ruedas de Python con versiones y hashes de `requirements.lock`.
+Al actualizar `requirements.txt`, regenera el lock desde la raíz:
+
+```powershell
+uv pip compile backend/requirements.txt --generate-hashes --no-build --python-version 3.14 --python-platform x86_64-manylinux_2_28 --output-file backend/requirements.lock
+```
+
 Para detener el contenedor:
 
 ```powershell

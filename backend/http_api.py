@@ -46,42 +46,45 @@ class CameraWebSocket:
         from_thread.run(partial(self.socket.close, code=code, reason=reason))
 
 
+def dispatch(
+    channel: CameraChannel, expected: bytes, request: Request, action: str | None,
+) -> JSONResponse:
+    values = request.headers.getlist("authorization")
+    endpoint = request.url.path if action is not None else "(ruta desconocida)"
+    peer = request.client.host if request.client else "desconocido"
+    print(f"[API] {request.method} {endpoint} | origen: {peer}", flush=True)
+    headers = {"Cache-Control": "no-store"}
+    if len(values) != 1 or not compare_digest(values[0].encode(), expected):
+        print("[API] HTTP 401 | Sin envío por WebSocket", flush=True)
+        headers["WWW-Authenticate"] = "Bearer"
+        return JSONResponse({"status": "unauthorized"}, status_code=401, headers=headers)
+    if action is None:
+        print("[API] HTTP 404 | Sin envío por WebSocket", flush=True)
+        return JSONResponse({"status": "not_found"}, status_code=404, headers=headers)
+    result = channel.send_command(action)
+    status = STATUS_CODES[result["status"]]
+    print(f"[API] HTTP {status.value} | Resultado del canal WebSocket: {result}", flush=True)
+    return JSONResponse(result, status_code=status.value, headers=headers)
+
+
 def create_app(channel: CameraChannel, credential: str) -> FastAPI:
     if not credential or not credential.isascii() or not credential.isalnum():
         raise ValueError("Configura CAMERA_CONTROL_API_TOKEN en backend/.env con un valor alfanumérico.")
     expected = f"Bearer {credential}".encode()
     app = FastAPI(title="TFM - Control de cámara", version="1.0")
 
-    def dispatch(request: Request, action: str | None) -> JSONResponse:
-        values = request.headers.getlist("authorization")
-        endpoint = request.url.path if action is not None else "(ruta desconocida)"
-        peer = request.client.host if request.client else "desconocido"
-        print(f"[API] {request.method} {endpoint} | origen: {peer}", flush=True)
-        headers = {"Cache-Control": "no-store"}
-        if len(values) != 1 or not compare_digest(values[0].encode(), expected):
-            print("[API] HTTP 401 | Sin envío por WebSocket", flush=True)
-            headers["WWW-Authenticate"] = "Bearer"
-            return JSONResponse({"status": "unauthorized"}, status_code=401, headers=headers)
-        if action is None:
-            print("[API] HTTP 404 | Sin envío por WebSocket", flush=True)
-            return JSONResponse({"status": "not_found"}, status_code=404, headers=headers)
-        result = channel.send_command(action)
-        status = STATUS_CODES[result["status"]]
-        print(f"[API] HTTP {status.value} | Resultado del canal WebSocket: {result}", flush=True)
-        return JSONResponse(result, status_code=status.value, headers=headers)
-
     @app.get("/api/v1/camera/day-night")
     def day_night(request: Request):
-        return dispatch(request, "get_day_night")
+        return dispatch(channel, expected, request, "get_day_night")
 
     @app.get("/api/v1/camera/microphone")
     def microphone(request: Request):
-        return dispatch(request, "get_microphone")
+        return dispatch(channel, expected, request, "get_microphone")
 
     @app.post("/api/v1/camera/actions/{action}")
     def command(request: Request, action: str):
         allowed = action in COMMANDS and action not in QUERIES.values()
-        return dispatch(request, action if allowed else None)
+        return dispatch(channel, expected, request, action if allowed else None)
 
     @app.websocket("/camera")
     async def controller(socket: WebSocket):
