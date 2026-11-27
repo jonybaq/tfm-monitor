@@ -48,12 +48,6 @@ resource backend 'Microsoft.App/containerApps@2025-07-01' = {
           identity: pullIdentity.id
         }
       ]
-      identitySettings: [
-        {
-          identity: pullIdentity.id
-          lifecycle: 'None'
-        }
-      ]
       secrets: [
         {
           name: 'camera-api-token'
