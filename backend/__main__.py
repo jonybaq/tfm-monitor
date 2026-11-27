@@ -1,5 +1,6 @@
 """Local console for sending commands through the camera WebSocket."""
 
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -20,6 +21,8 @@ ENV_FILE = Path(__file__).with_name(".env")
 
 
 def read_token(setting: str = "CAMERA_CONTROL_WS_TOKEN") -> str:
+    if setting in os.environ:
+        return os.environ[setting]
     configured_value = ""
     if ENV_FILE.is_file():
         for line in ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
@@ -82,19 +85,21 @@ def main() -> int:
         return 1
     try:
         channel = CameraChannel(read_token())
-        with local_server(channel) as server:
+        host = os.environ.get("BACKEND_BIND_HOST", "127.0.0.1")
+        if api_mode:
+            import uvicorn
+
+            from .http_api import create_app
+
+            app = create_app(channel, read_token("CAMERA_CONTROL_API_TOKEN"))
+            uvicorn.run(app, host=host, port=8080, access_log=False, ws_max_size=4096)
+            return 0
+        with local_server(channel, host=host) as server:
             thread = Thread(target=server.serve_forever, daemon=True)
             thread.start()
             try:
-                print("Servidor escuchando en ws://127.0.0.1:8765/camera.")
-                if api_mode:
-                    from .http_api import create_http_server
-
-                    with create_http_server(channel, read_token("CAMERA_CONTROL_API_TOKEN")) as api:
-                        print("API escuchando en http://127.0.0.1:8080.", flush=True)
-                        api.serve_forever()
-                else:
-                    run_console(channel)
+                print(f"Servidor WebSocket escuchando en {host}:8765/camera.", flush=True)
+                run_console(channel)
             finally:
                 server.shutdown()
                 channel.close()

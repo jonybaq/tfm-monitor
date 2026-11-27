@@ -1,33 +1,26 @@
 import unittest
-from http.client import HTTPConnection
-from threading import Thread
 from unittest.mock import Mock
 
-from backend.http_api import create_http_server
+from fastapi.testclient import TestClient
+
+from backend.http_api import create_app
 
 
 class CameraApiTests(unittest.TestCase):
     def setUp(self):
         self.channel = Mock()
-        self.server = create_http_server(self.channel, "credential123", port=0)
-        self.thread = Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        self.addCleanup(self.server.server_close)
-        self.addCleanup(self.server.shutdown)
+        self.client = self.enterContext(TestClient(create_app(self.channel, "credential123")))
 
     def request(self, method, route, *, authenticated=True):
-        connection = HTTPConnection("127.0.0.1", self.server.server_port, timeout=3)
-        self.addCleanup(connection.close)
         headers = {"Authorization": "Bearer credential123"} if authenticated else {}
-        connection.request(method, route, headers=headers)
-        response = connection.getresponse()
-        return response.status, response.read()
+        response = self.client.request(method, route, headers=headers)
+        return response.status_code, response.json()
 
     def test_query_returns_camera_state(self):
         self.channel.send_command.return_value = {"status": "accepted", "state": "auto"}
         status, body = self.request("GET", "/api/v1/camera/day-night")
         self.assertEqual(status, 200)
-        self.assertIn(b'"state": "auto"', body)
+        self.assertEqual(body, {"status": "accepted", "state": "auto"})
         self.channel.send_command.assert_called_once_with("get_day_night")
 
     def test_action_preserves_movement_limit(self):

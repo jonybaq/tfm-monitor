@@ -41,10 +41,12 @@ class CameraChannel:
     def authorize(self, connection, request):
         if request.path != "/camera":
             return connection.respond(HTTPStatus.NOT_FOUND, "Ruta no disponible.")
-        headers = request.headers.get_all("Authorization")
-        if len(headers) != 1 or not compare_digest(headers[0].encode(), self._authorization):
+        if not self.accepts_token(request.headers.get_all("Authorization")):
             return connection.respond(HTTPStatus.UNAUTHORIZED, "Credencial inválida.")
         return None
+
+    def accepts_token(self, headers: list[str]) -> bool:
+        return len(headers) == 1 and compare_digest(headers[0].encode(), self._authorization)
 
     def handle(self, connection) -> None:
         peer_ip = connection.remote_address[0]
@@ -140,8 +142,8 @@ class CameraChannel:
             connection.close()
 
 
-def local_server(channel: CameraChannel, port: int = 8765):
+def local_server(channel: CameraChannel, port: int = 8765, *, host: str = "127.0.0.1"):
     return serve(
-        channel.handle, "127.0.0.1", port, process_request=channel.authorize,
+        channel.handle, host, port, process_request=channel.authorize,
         max_size=4096, open_timeout=5, close_timeout=2,
     )

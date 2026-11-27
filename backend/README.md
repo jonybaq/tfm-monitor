@@ -47,13 +47,16 @@ Pruebas automatizadas con un cliente WebSocket simulado:
 
 ## API REST local y Postman
 
-Inicia el backend en modo API. Este proceso también levanta el WebSocket:
+Inicia el backend en modo API. FastAPI sirve REST y WebSocket en el mismo
+puerto, `8080`. La documentación interactiva está en
+`http://127.0.0.1:8080/docs`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m backend --api
 ```
 
-En otra terminal inicia `python -m camera_control` con el entorno del proyecto
+Configura `CAMERA_CONTROL_WS_URL=ws://127.0.0.1:8080/camera` en
+`camera_control/.env`. En otra terminal inicia `python -m camera_control` con el entorno del proyecto
 y elige **Conectar al servidor WebSocket**. Importa
 `camera-control.postman_collection.json` en Postman. Configura la variable
 local `apiToken` con el valor de `CAMERA_CONTROL_API_TOKEN` de
@@ -66,3 +69,24 @@ local `apiToken` con el valor de `CAMERA_CONTROL_API_TOKEN` de
   controlador está desconectado y `504` si no hay confirmación a tiempo.
 
 La API escucha en `127.0.0.1:8080` para esta primera versión local.
+
+## Docker local
+
+Detén el backend ejecutado directamente en la laptop antes de levantar el
+contenedor. Desde la raíz del repositorio:
+
+```powershell
+docker compose -f backend/compose.yaml up --build -d
+docker compose -f backend/compose.yaml logs -f backend
+```
+
+Compose inyecta los tokens de `backend/.env` al arrancar. El contenedor
+publica REST en `http://127.0.0.1:8080` y WebSocket en
+`ws://127.0.0.1:8080/camera`. Usa la misma colección de Postman y ejecuta
+`camera_control` en la laptop como antes.
+
+Para detener el contenedor:
+
+```powershell
+docker compose -f backend/compose.yaml down
+```
