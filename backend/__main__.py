@@ -1,6 +1,7 @@
 """Local console for sending commands through the camera WebSocket."""
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from threading import Thread
 
@@ -28,6 +29,18 @@ def read_token(setting: str = "CAMERA_CONTROL_WS_TOKEN") -> str:
     return configured_value
 
 
+def read_menu_step(read_key: Callable[[], str]) -> int | None:
+    arrow_steps = {"H": -1, "P": 1}
+    while True:
+        key = read_key()
+        if key in {"\x1b", "\x03"}:
+            return None
+        if key == "\r":
+            return 0
+        if key in {"\x00", "\xe0"} and (step := arrow_steps.get(read_key())) is not None:
+            return step
+
+
 def run_console(channel: CameraChannel) -> None:
     from msvcrt import getwch
 
@@ -38,24 +51,17 @@ def run_console(channel: CameraChannel) -> None:
     while True:
         for index, label in enumerate(labels):
             print(f"{'>' if index == selected else ' '} {label}")
-        while True:
-            key = getwch()
-            if key in {"\x1b", "\x03"}:
-                return
-            if key == "\r":
-                if selected == len(actions):
-                    return
-                action = actions[selected]
-                if action == "mute_microphone":
-                    print("El silencio del micrófono afecta al análisis de llanto.")
-                show_result(action, channel.send_command(action))
-                break
-            if key in {"\x00", "\xe0"}:
-                step = {"H": -1, "P": 1}.get(getwch())
-                if step is not None:
-                    selected = (selected + step) % len(labels)
-                    print(f"\033[{len(labels)}A", end="", flush=True)
-                    break
+        step = read_menu_step(getwch)
+        if step is None or (step == 0 and selected == len(actions)):
+            return
+        if step:
+            selected = (selected + step) % len(labels)
+            print(f"\033[{len(labels)}A", end="", flush=True)
+            continue
+        action = actions[selected]
+        if action == "mute_microphone":
+            print("El silencio del micrófono afecta al análisis de llanto.")
+        show_result(action, channel.send_command(action))
 
 
 def show_result(action: str, result: dict) -> None:

@@ -6,6 +6,7 @@ source = .
 [report]
 include =
     ai/*
+    backend/*
     capture/*
     camera_control/*
     streaming/*

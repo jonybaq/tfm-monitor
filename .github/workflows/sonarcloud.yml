@@ -51,7 +51,10 @@ jobs:
               item.attrib["filename"]
               for item in ElementTree.parse("coverage.xml").iter("class")
           ]
-          expected = {"camera_control/__main__.py", "streaming/__main__.py"}
+          expected = {
+              "backend/__main__.py", "backend/camera_socket.py", "backend/http_api.py",
+              "camera_control/__main__.py", "streaming/__main__.py",
+          }
           invalid = sorted(path for path in expected if paths.count(path) != 1)
           if invalid:
               raise SystemExit(f"Invalid coverage paths: {', '.join(invalid)}")
