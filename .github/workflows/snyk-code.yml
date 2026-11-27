@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   analyze:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -35,4 +36,8 @@ jobs:
             echo '::error::Snyk did not return a report URL.'
             exit 1
           fi
-          printf '[Open Snyk Code report](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
+          printf '[Ver informe de Snyk Code](%s)\n' "$report_url" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -eq 1 ]; then
+            echo '::error::Snyk Code encontró vulnerabilidades. Revisa el informe enlazado en Summary.'
+            exit 1
+          fi
