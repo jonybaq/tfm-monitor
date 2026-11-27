@@ -1,0 +1,74 @@
+name: Deploy camera backend
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - backend/**
+      - requirements-ci.lock
+      - .github/workflows/deploy-camera-backend.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: camera-backend-azure
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      BACKEND_IMAGE: tfmtapobackend.azurecr.io/tfm-camera-backend:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Test backend
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: \
+            --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-ci.lock
+          python -m unittest discover -s backend/tests
+      - name: Build image
+        run: docker build --tag "$BACKEND_IMAGE" backend
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Publish image to Azure Container Registry
+        run: |
+          az acr login --name tfmtapobackend
+          docker push "$BACKEND_IMAGE"
+      - name: Deploy backend to Azure Container Apps
+        id: deploy
+        env:
+          CAMERA_CONTROL_API_TOKEN: ${{ secrets.CAMERA_CONTROL_API_TOKEN }}
+          CAMERA_CONTROL_WS_TOKEN: ${{ secrets.CAMERA_CONTROL_WS_TOKEN }}
+        run: |
+          : "${CAMERA_CONTROL_API_TOKEN:?Missing CAMERA_CONTROL_API_TOKEN}"
+          : "${CAMERA_CONTROL_WS_TOKEN:?Missing CAMERA_CONTROL_WS_TOKEN}"
+          url=$(az deployment group create \
+            --resource-group rg-tfm-tapo-test \
+            --name "camera-backend-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --mode Incremental \
+            --parameters backend/deploy/github.bicepparam \
+            --query properties.outputs.url.value --output tsv)
+          test -n "$url"
+          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+      - name: Verify HTTPS and camera route authentication
+        env:
+          BACKEND_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          curl --fail --silent --show-error --max-time 10 --retry 6 \
+            --retry-all-errors --retry-delay 5 "$BACKEND_URL/openapi.json" >/dev/null
+          status=$(curl --silent --show-error --max-time 10 --output /dev/null \
+            --write-out '%{http_code}' "$BACKEND_URL/api/v1/camera/day-night")
+          test "$status" = 401
+          printf 'Backend: %s\n' "$BACKEND_URL" >> "$GITHUB_STEP_SUMMARY"
